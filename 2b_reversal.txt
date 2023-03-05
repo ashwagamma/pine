@@ -1,0 +1,1041 @@
+//@version=5
+indicator(title='2b', shorttitle='2b reversal', overlay=true, max_labels_count = 500)
+//, timeframe=''
+
+// @ToDo
+// Disable pdl_rth/pdl_eth if dpl_rth<pdl_rth/pdl_eth
+
+// SessionLow() returns the lowest price during the specified 
+// session, optionally corrected for the given time zone.
+// Returns 'na' when the session hasn't started or isn't on the chart.
+timeframe_selection = input.string('mtf', 'Timeframe Selection', ['mtf','chart'], "mtf: multi-timeframe analysis, enable alerts on lowest timeframe chart. indicator will analyze all timeframes selected in Multi-TimeFrame Selection below\nchart: If chart option is chosen, then only current chart timeframe will be analyzed.")
+level_selection = input.string('auto', 'Level Selection', ['explicit','auto'], "If set to explicit, please specify explicit level below. If set to lookback, please specify number of lookback bars below to find the lowest. LoD is low of current session, Lo2D is low of previous day and current session, LoW is low of week, Lo2W is min of low of current and past week")
+level_in_explicit = input.float(4070, 'Explicit Level', 0, 100000.0, 0.25, "If set to 0, the indicator will look for false_bkdn from most recent candle that broke a previous candle's low")
+bool is_alert_enabled_dpl_dph = input.bool(true, 'dpl/dph', 'current day rth low/high', inline='a', group='Auto Levels Enabled')
+bool is_alert_enabled_opl_oph = input.bool(true, 'opl/oph', 'overnight swing low/high', inline='a', group='Auto Levels Enabled')
+bool is_alert_enabled_pdl_pdh = input.bool(true, 'pdl/pdh', 'previous day rth low/high', inline='a', group='Auto Levels Enabled')
+bool is_alert_enabled_cwl_cwh = input.bool(true, 'cwl/cwh', 'current week low/high', inline='a', group='Auto Levels Enabled')
+bool is_alert_enabled_pwl_pwh = input.bool(true, 'pwl/pwh', 'dpl/dph: current day rth pivot low/high\nopl/oph: overnight pivot low/high\npdl/pdh: previous day low/high\ncwl/cwh: current week low/high\npwl/pwh: previous week low/high', inline='a', group='Auto Levels Enabled')
+bool is_options_allowed_mtf_1 = input.bool(true, '1m', '1m', inline='a', group='Multi Time Frame Selections')
+bool is_options_allowed_mtf_5 = input.bool(true, '5m', '1m', inline='a', group='Multi Time Frame Selections')
+bool is_options_allowed_mtf_15 = input.bool(true, '15m', '1m', inline='a', group='Multi Time Frame Selections')
+bool is_options_allowed_mtf_30 = input.bool(true, '30m', '1m', inline='a', group='Multi Time Frame Selections')
+bool is_options_allowed_mtf_60 = input.bool(true, '60m', 'Selectively enable only few timeframes for multi-time frame indicator', inline='a', group='Multi Time Frame Selections')
+bool is_alert_enabled_bkdn = input.bool(false, 'Breakdown', 'to enable breakdown alert', inline='a', group='Alerts Enabled')
+bool is_alert_enabled_bkout = input.bool(false, 'Breakout', 'to enable breakout alert', inline='a', group='Alerts Enabled')
+bool is_alert_enabled_reversal = input.bool(true, 'Reversal', 'To selectively enable alerts', inline='a', group='Alerts Enabled')
+bool is_connector_enabled = input.bool(true, 'Connector', 'Enabling this draws a line from breakdown candle to breakout candle')
+
+
+float test_level_to_plot = na
+
+[open_1, high_1, low_1, close_1, is_bar_closed_1, sma50_1] = request.security(syminfo.tickerid, "1", [open, high, low, close, barstate.isconfirmed, ta.sma(hlc3, 50)])
+[open_5, high_5, low_5, close_5, is_bar_closed_5, sma50_5] = request.security(syminfo.tickerid, "5", [open, high, low, close, barstate.isconfirmed, ta.sma(hlc3, 50)])
+[open_15, high_15, low_15, close_15, is_bar_closed_15] = request.security(syminfo.tickerid, "15", [open, high, low, close, barstate.isconfirmed])
+[open_30, high_30, low_30, close_30, is_bar_closed_30] = request.security(syminfo.tickerid, "30", [open, high, low, close, barstate.isconfirmed])
+[open_60, high_60, low_60, close_60, is_bar_closed_60] = request.security(syminfo.tickerid, "60", [open, high, low, close, barstate.isconfirmed])
+var label labelobj_lvl_bkdn_a = label.new(bar_index, na)
+var label labelobj_lvl_bkdn_b = label.new(bar_index, na)
+var label labelobj_lvl_bkdn_c = label.new(bar_index, na)
+var label labelobj_lvl_bkdn_d = label.new(bar_index, na)
+var label labelobj_lvl_bkdn_e = label.new(bar_index, na)
+var label labelobj_lvl_bkdn_f = label.new(bar_index, na)
+var label labelobj_lvl_bkout_a = label.new(bar_index, na)
+var label labelobj_lvl_bkout_b = label.new(bar_index, na)
+var label labelobj_lvl_bkout_c = label.new(bar_index, na)
+var label labelobj_lvl_bkout_d = label.new(bar_index, na)
+var label labelobj_lvl_bkout_e = label.new(bar_index, na)
+var label labelobj_lvl_bkout_f = label.new(bar_index, na)
+
+var line lineobj_lvl_bkdn_a = line.new(bar_index-10, 4100, bar_index+10, 4100, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkdn_b = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkdn_c = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkdn_d = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkdn_e = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkdn_f = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_a = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_b = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_c = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_d = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_e = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+var line lineobj_lvl_bkout_f = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+
+// Current timeframe lowest lows/highest highs
+// [ll_01, ll_02, ll_03, ll_04, ll_05, ll_06, ll_07, ll_08, ll_09, ll_10] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11, ll_12, ll_13, ll_14, ll_15, ll_16, ll_17, ll_18, ll_19, ll_20] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21, ll_22, ll_23, ll_24, ll_25, ll_26, ll_27, ll_28, ll_29, ll_30] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [hh_01, hh_02, hh_03, hh_04, hh_05, hh_06, hh_07, hh_08, hh_09, hh_10] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [hh_11, hh_12, hh_13, hh_14, hh_15, hh_16, hh_17, hh_18, hh_19, hh_20] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [hh_21, hh_22, hh_23, hh_24, hh_25, hh_26, hh_27, hh_28, hh_29, hh_30] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// // ALl timeframe lowest lows/highest highs
+// [ll_01_1, ll_02_1, ll_03_1, ll_04_1, ll_05_1, ll_06_1, ll_07_1, ll_08_1, ll_09_1, ll_10_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_1, ll_12_1, ll_13_1, ll_14_1, ll_15_1, ll_16_1, ll_17_1, ll_18_1, ll_19_1, ll_20_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_1, ll_22_1, ll_23_1, ll_24_1, ll_25_1, ll_26_1, ll_27_1, ll_28_1, ll_29_1, ll_30_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_5, ll_02_5, ll_03_5, ll_04_5, ll_05_5, ll_06_5, ll_07_5, ll_08_5, ll_09_5, ll_10_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_5, ll_12_5, ll_13_5, ll_14_5, ll_15_5, ll_16_5, ll_17_5, ll_18_5, ll_19_5, ll_20_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_5, ll_22_5, ll_23_5, ll_24_5, ll_25_5, ll_26_5, ll_27_5, ll_28_5, ll_29_5, ll_30_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_15, ll_02_15, ll_03_15, ll_04_15, ll_05_15, ll_06_15, ll_07_15, ll_08_15, ll_09_15, ll_10_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_15, ll_12_15, ll_13_15, ll_14_15, ll_15_15, ll_16_15, ll_17_15, ll_18_15, ll_19_15, ll_20_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_15, ll_22_15, ll_23_15, ll_24_15, ll_25_15, ll_26_15, ll_27_15, ll_28_15, ll_29_15, ll_30_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// // [ll_21_30, ll_22_30, ll_23_30, ll_24_30, ll_25_30, ll_26_30, ll_27_30, ll_28_30, ll_29_30, ll_30_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// //[ll_11_60, ll_12_60, ll_13_60, ll_14_60, ll_15_60, ll_16_60, ll_17_60, ll_18_60, ll_19_60, ll_20_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// //[ll_21_60, ll_22_60, ll_23_60, ll_24_60, ll_25_60, ll_26_60, ll_27_60, ll_28_60, ll_29_60, ll_30_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [hh_01_1, hh_02_1, hh_03_1, hh_04_1, hh_05_1, hh_06_1, hh_07_1, hh_08_1, hh_09_1, hh_10_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_1, hh_12_1, hh_13_1, hh_14_1, hh_15_1, hh_16_1, hh_17_1, hh_18_1, hh_19_1, hh_20_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_1, hh_22_1, hh_23_1, hh_24_1, hh_25_1, hh_26_1, hh_27_1, hh_28_1, hh_29_1, hh_30_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_5, hh_02_5, hh_03_5, hh_04_5, hh_05_5, hh_06_5, hh_07_5, hh_08_5, hh_09_5, hh_10_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_5, hh_12_5, hh_13_5, hh_14_5, hh_15_5, hh_16_5, hh_17_5, hh_18_5, hh_19_5, hh_20_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_5, hh_22_5, hh_23_5, hh_24_5, hh_25_5, hh_26_5, hh_27_5, hh_28_5, hh_29_5, hh_30_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_15, hh_02_15, hh_03_15, hh_04_15, hh_05_15, hh_06_15, hh_07_15, hh_08_15, hh_09_15, hh_10_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_15, hh_12_15, hh_13_15, hh_14_15, hh_15_15, hh_16_15, hh_17_15, hh_18_15, hh_19_15, hh_20_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_15, hh_22_15, hh_23_15, hh_24_15, hh_25_15, hh_26_15, hh_27_15, hh_28_15, hh_29_15, hh_30_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// //[hh_21_30, hh_22_30, hh_23_30, hh_24_30, hh_25_30, hh_26_30, hh_27_30, hh_28_30, hh_29_30, hh_30_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// //[hh_11_60, hh_12_60, hh_13_60, hh_14_60, hh_15_60, hh_16_60, hh_17_60, hh_18_60, hh_19_60, hh_20_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// //[hh_21_60, hh_22_60, hh_23_60, hh_24_60, hh_25_60, hh_26_60, hh_27_60, hh_28_60, hh_29_60, hh_30_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+
+// arr_ll = array.from(ll_01, ll_02, ll_03, ll_04, ll_05, ll_06, ll_07, ll_08, ll_09, ll_10, ll_11, ll_12, ll_13, ll_14, ll_15, ll_16, ll_17, ll_18, ll_19, ll_20, ll_21, ll_22, ll_23, ll_24, ll_25, ll_26, ll_27, ll_28, ll_29, ll_30)
+// arr_hh = array.from(hh_01, hh_02, hh_03, hh_04, hh_05, hh_06, hh_07, hh_08, hh_09, hh_10, hh_11, hh_12, hh_13, hh_14, hh_15, hh_16, hh_17, hh_18, hh_19, hh_20, hh_21, hh_22, hh_23, hh_24, hh_25, hh_26, hh_27, hh_28, hh_29, hh_30)
+// arr_ll_1 = array.from(ll_01_1, ll_02_1, ll_03_1, ll_04_1, ll_05_1, ll_06_1, ll_07_1, ll_08_1, ll_09_1, ll_10_1, ll_11_1, ll_12_1, ll_13_1, ll_14_1, ll_15_1, ll_16_1, ll_17_1, ll_18_1, ll_19_1, ll_20_1, ll_21_1, ll_22_1, ll_23_1, ll_24_1, ll_25_1, ll_26_1, ll_27_1, ll_28_1, ll_29_1, ll_30_1)
+// arr_ll_5 = array.from(ll_01_5, ll_02_5, ll_03_5, ll_04_5, ll_05_5, ll_06_5, ll_07_5, ll_08_5, ll_09_5, ll_10_5, ll_11_5, ll_12_5, ll_13_5, ll_14_5, ll_15_5, ll_16_5, ll_17_5, ll_18_5, ll_19_5, ll_20_5, ll_21_5, ll_22_5, ll_23_5, ll_24_5, ll_25_5, ll_26_5, ll_27_5, ll_28_5, ll_29_5, ll_30_5)
+// arr_ll_15 = array.from(ll_01_15, ll_02_15, ll_03_15, ll_04_15, ll_05_15, ll_06_15, ll_07_15, ll_08_15, ll_09_15, ll_10_15, ll_11_15, ll_12_15, ll_13_15, ll_14_15, ll_15_15, ll_16_15, ll_17_15, ll_18_15, ll_19_15, ll_20_15, ll_21_15, ll_22_15, ll_23_15, ll_24_15, ll_25_15, ll_26_15, ll_27_15, ll_28_15, ll_29_15, ll_30_15)
+// //arr_ll_30 = array.from(ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30, ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30, ll_21_30, ll_22_30, ll_23_30, ll_24_30, ll_25_30, ll_26_30, ll_27_30, ll_28_30, ll_29_30, ll_30_30)
+// //arr_ll_60 = array.from(ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60, ll_11_60, ll_12_60, ll_13_60, ll_14_60, ll_15_60, ll_16_60, ll_17_60, ll_18_60, ll_19_60, ll_20_60, ll_21_60, ll_22_60, ll_23_60, ll_24_60, ll_25_60, ll_26_60, ll_27_60, ll_28_60, ll_29_60, ll_30_60)
+// arr_ll_30 = array.from(ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30, ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30)
+// arr_ll_60 = array.from(ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60)
+// arr_hh_1 = array.from(hh_01_1, hh_02_1, hh_03_1, hh_04_1, hh_05_1, hh_06_1, hh_07_1, hh_08_1, hh_09_1, hh_10_1, hh_11_1, hh_12_1, hh_13_1, hh_14_1, hh_15_1, hh_16_1, hh_17_1, hh_18_1, hh_19_1, hh_20_1, hh_21_1, hh_22_1, hh_23_1, hh_24_1, hh_25_1, hh_26_1, hh_27_1, hh_28_1, hh_29_1, hh_30_1)
+// arr_hh_5 = array.from(hh_01_5, hh_02_5, hh_03_5, hh_04_5, hh_05_5, hh_06_5, hh_07_5, hh_08_5, hh_09_5, hh_10_5, hh_11_5, hh_12_5, hh_13_5, hh_14_5, hh_15_5, hh_16_5, hh_17_5, hh_18_5, hh_19_5, hh_20_5, hh_21_5, hh_22_5, hh_23_5, hh_24_5, hh_25_5, hh_26_5, hh_27_5, hh_28_5, hh_29_5, hh_30_5)
+// arr_hh_15 = array.from(hh_01_15, hh_02_15, hh_03_15, hh_04_15, hh_05_15, hh_06_15, hh_07_15, hh_08_15, hh_09_15, hh_10_15, hh_11_15, hh_12_15, hh_13_15, hh_14_15, hh_15_15, hh_16_15, hh_17_15, hh_18_15, hh_19_15, hh_20_15, hh_21_15, hh_22_15, hh_23_15, hh_24_15, hh_25_15, hh_26_15, hh_27_15, hh_28_15, hh_29_15, hh_30_15)
+// //arr_hh_30 = array.from(hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30, hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30, hh_21_30, hh_22_30, hh_23_30, hh_24_30, hh_25_30, hh_26_30, hh_27_30, hh_28_30, hh_29_30, hh_30_30)
+// //arr_hh_60 = array.from(hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60, hh_11_60, hh_12_60, hh_13_60, hh_14_60, hh_15_60, hh_16_60, hh_17_60, hh_18_60, hh_19_60, hh_20_60, hh_21_60, hh_22_60, hh_23_60, hh_24_60, hh_25_60, hh_26_60, hh_27_60, hh_28_60, hh_29_60, hh_30_60)
+// arr_hh_30 = array.from(hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30, hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30)
+// arr_hh_60 = array.from(hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60)
+
+SessionLow(sessionTime, sessionTimeZone=syminfo.timezone, price, is_strict=false) =>
+    insideSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
+    var float sessionLowPrice = na
+//
+    if insideSession and not insideSession[1]
+        sessionLowPrice := price
+    else if insideSession
+        if not na(price)
+            if not na(sessionLowPrice)
+                sessionLowPrice := math.min(sessionLowPrice, price)
+            else   
+                sessionLowPrice := price
+    else
+        if is_strict
+            sessionLowPrice := na
+
+    sessionLowPrice
+
+SessionHigh(sessionTime, sessionTimeZone=syminfo.timezone, price, is_strict=false) =>
+    insideSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
+    var float sessionHighPrice = na
+//
+    if insideSession and not insideSession[1]
+        sessionHighPrice := price
+    else if insideSession
+        if not na(price)
+            if not na(sessionHighPrice)
+                sessionHighPrice := math.max(sessionHighPrice, price)
+            else   
+                sessionHighPrice := price
+    else
+        if is_strict
+            sessionHighPrice := na
+
+    sessionHighPrice
+
+// InSession() returns 'true' when the current bar happens inside the specified session, corrected for the given time zone (optional).
+// Returns 'false' when the bar doesn't happen in that time period, or when the chart's time frame is 1 day or higher. 
+InSession(sessionTimes, sessionTimeZone=syminfo.timezone) =>
+    not na(time(timeframe.period, sessionTimes, sessionTimeZone))
+
+GetLowestLow(source, int bs=1) =>
+    minval = source
+    for idx = 1 to bs
+        minval := math.min(minval, source[idx])
+    minval
+
+GetHighestHigh(source, int bs=1) =>
+    maxval = source
+    for idx = 1 to bs
+        maxval := math.max(maxval, source[idx])
+    maxval
+
+Analyze2bBullDetail(level, open_tf, high_tf, low_tf, close_tf, bool bool_draw_line) =>
+    bkdn_criterion_ohlc = close_tf
+    false_bkdn_criterion_ohlc = close_tf
+
+    bool trend_chk = close_tf[1] >= level and close_tf[2] > level and close_tf[3] > level // want this to be in a trend, so coming into the level
+    //bool is_bar_too_big = math.abs(low_tf - high_tf) > 25 // more than 25 pts is too much, useless
+    bool is_bar_too_big = false
+    // find the candle that breaks the level
+    is_bkdn = bkdn_criterion_ohlc < level and open_tf >= level and trend_chk and not is_bar_too_big
+    // bs = ta.barssince(is_bkdn)
+    //bs_ll = is_false_bkdn ? bs : 1
+    // lvl_ll = GetLowestLow(low_tf, 10)
+    lvl_ll = ta.lowest(low_tf, 30)
+    //lvl_ll = array.get(arr_in_ll, math.min(ta.barssince(is_bkdn)+1, array.size(arr_in_ll)-1))
+
+    // capture the high of the bkdn candle and hold it
+    hgh = ta.valuewhen(is_bkdn, high_tf, 0)
+    lvl_bkdn = ta.valuewhen(is_bkdn, level, 0)
+    bs = ta.barssince(is_bkdn)
+    //label.new(bar_index, 12250, str.tostring(high_tf))
+    // check if current realtime candle price is above the bkdn candle's high
+    close_above_hgh = false_bkdn_criterion_ohlc > hgh and not (false_bkdn_criterion_ohlc[1] > hgh[1])
+    bool is_bkdn_state = false
+    is_bkdn_state := is_bkdn_state[1] ? (not close_above_hgh ? true : false) : is_bkdn
+    is_false_bkdn = is_bkdn_state[1] and close_above_hgh// and math.abs(lvl_ll - hgh) < val
+
+    if is_false_bkdn and bool_draw_line and bs < 100
+        line.new(bar_index-bs, lvl_bkdn, bar_index, hgh, xloc.bar_index, extend.none, color.gray, line.style_arrow_right, 1)
+        //line.new(bar_index-1, lvl_bkdn, bar_index+1, lvl_bkdn, xloc.bar_index, extend.none, color.fuchsia, line.style_solid, 1)
+        //line.new(bar_index-1, hgh, bar_index+1, hgh, xloc.bar_index, extend.none, color.green, line.style_solid, 1)
+        //line.new(bar_index-1, lvl_ll, bar_index+1, lvl_ll, xloc.bar_index, extend.none, color.red, line.style_solid, 1)
+
+    [is_bkdn, is_false_bkdn, lvl_bkdn, hgh, lvl_ll]
+
+Analyze2bBearDetail(level, open_tf, high_tf, low_tf, close_tf, bool bool_draw_line) =>
+    bkout_criterion_ohlc = close_tf
+    false_bkout_criterion_ohlc = close_tf
+
+    bool trend_chk = close_tf[1] <= level and close_tf[2] < level and close_tf[3] < level // want this to be in a trend, so coming into the level
+
+    // find the candle that breaks the level
+    is_bkout = bkout_criterion_ohlc > level and open_tf <= level and trend_chk
+    // bs = ta.barssince(is_bkout)
+    // lvl_hh = GetHighestHigh(high_tf, 10)
+    lvl_hh = ta.highest(high_tf, 30)
+    //lvl_hh = array.get(arr_in_hh, math.min(ta.barssince(is_bkout)+1, array.size(arr_in_hh)-1))
+
+    // capture the low of the bkout candle and hold it
+    lw = ta.valuewhen(is_bkout, low_tf, 0)
+    lvl_bkout = ta.valuewhen(is_bkout, level, 0)
+    bs = ta.barssince(is_bkout)
+
+    // check if current realtime candle price is below the bkout candle's low
+    close_below_lw = false_bkout_criterion_ohlc < lw and not (false_bkout_criterion_ohlc[1] < lw[1])
+    bool is_bkout_state = false
+    is_bkout_state := is_bkout_state[1] ? (not close_below_lw ? true : false) : is_bkout
+    is_false_bkout = is_bkout_state[1] and close_below_lw //and math.abs(lvl_hh-lw) < 26
+
+    if is_false_bkout and bool_draw_line and bs < 100
+        line.new(bar_index-bs, lvl_bkout, bar_index, lw, xloc.bar_index, extend.none, color.gray, line.style_arrow_right, 1)
+
+
+    [is_bkout, is_false_bkout, lvl_bkout, lw, lvl_hh]
+
+Analyze2bBull(level)    => Analyze2bBullDetail(level, open, high, low, close, true and is_connector_enabled)
+Analyze2bBull_1(level)  => Analyze2bBullDetail(level, open_1, high_1, low_1, close_1, timeframe.in_seconds() == 60 and is_connector_enabled)
+Analyze2bBull_5(level)  => Analyze2bBullDetail(level, open_5, high_5, low_5, close_5, timeframe.in_seconds() == 300 and is_connector_enabled)
+Analyze2bBull_15(level) => Analyze2bBullDetail(level, open_15, high_15, low_15, close_15, timeframe.in_seconds() == 900 and is_connector_enabled)
+Analyze2bBull_30(level) => Analyze2bBullDetail(level, open_30, high_30, low_30, close_30, timeframe.in_seconds() == 1800 and is_connector_enabled)
+Analyze2bBull_60(level) => Analyze2bBullDetail(level, open_60, high_60, low_60, close_60, timeframe.in_seconds() == 3600 and is_connector_enabled)
+Analyze2bBear(level)    => Analyze2bBearDetail(level, open, high, low, close, true and is_connector_enabled)
+Analyze2bBear_1(level)  => Analyze2bBearDetail(level, open_1, high_1, low_1, close_1, timeframe.in_seconds() == 60 and is_connector_enabled)
+Analyze2bBear_5(level)  => Analyze2bBearDetail(level, open_5, high_5, low_5, close_5, timeframe.in_seconds() == 300 and is_connector_enabled)
+Analyze2bBear_15(level) => Analyze2bBearDetail(level, open_15, high_15, low_15, close_15, timeframe.in_seconds() == 900 and is_connector_enabled)
+Analyze2bBear_30(level) => Analyze2bBearDetail(level, open_30, high_30, low_30, close_30, timeframe.in_seconds() == 1800 and is_connector_enabled)
+Analyze2bBear_60(level) => Analyze2bBearDetail(level, open_60, high_60, low_60, close_60, timeframe.in_seconds() == 3600 and is_connector_enabled)
+
+GetLabel(tf_str, arr_is, arr_lbl, arr_lvl_bk, float[] arr_lvl_entry, float [] arr_lvl_stop) =>
+    string txt = na
+    for idx = 0 to array.size(arr_is)-1
+        if array.get(arr_is, idx)
+            float lvl_bk = array.get(arr_lvl_bk,idx)
+            string txt_temp = array.get(arr_lbl, idx) + '= '+ str.tostring(lvl_bk)
+            if not na(arr_lvl_entry) and not na(arr_lvl_stop)
+                float lvl_entry = array.get(arr_lvl_entry,idx)
+                float lvl_stop = array.get(arr_lvl_stop,idx)
+                txt_temp := txt_temp + ', ' + str.tostring(lvl_entry)+', '+str.tostring(lvl_stop)
+
+            if na(txt)
+                txt := txt_temp
+            else   
+                txt := txt + '\n' + txt_temp
+    if not na(txt)
+        txt := tf_str + ": " + txt
+    txt
+    
+ConcatMTFToolTip(tt1, tt5, tt15, tt30, tt60) =>
+    string txt = na
+    txt := not na(txt) ? (na(tt1) ? txt : txt+"\n"+tt1) : tt1
+    txt := not na(txt) ? (na(tt5) ? txt : txt+"\n"+tt5) : tt5
+    txt := not na(txt) ? (na(tt15) ? txt : txt+"\n"+tt15) : tt15
+    txt := not na(txt) ? (na(tt30) ? txt : txt+"\n"+tt30) : tt30
+    txt := not na(txt) ? (na(tt60) ? txt : txt+"\n"+tt60) : tt60
+    txt
+
+UpdateLine(line_obj, lvl) =>
+    line.set_xy1(line_obj, bar_index-12, lvl)
+    line.set_xy2(line_obj, bar_index+12, lvl)
+
+UpdateLevelLabel(lbl_obj, lbl, lvl, bar_padding) =>
+    label.set_size(lbl_obj, size.normal)
+    label.set_xy(lbl_obj, bar_index+bar_padding, lvl)
+    label.set_style(lbl_obj, label.style_none)
+    label.set_textcolor(lbl_obj, color.white)
+    label.set_text( lbl_obj, lbl+" = "+str.tostring(lvl))
+    label.set_color(lbl_obj, na)
+    label.set_textalign(lbl_obj, text.align_left)
+
+DrawLevelLine_arr(arr_line_obj, arr_label_obj, arr_levels, arr_labels, bar_padding) =>
+    //if bar_index == last_bar_index - 1
+    
+    if barstate.islast
+        sortedIndices = array.sort_indices(arr_levels, order.ascending)
+        float[] new_arr_levels = array.from(array.get(arr_levels, array.get(sortedIndices, 0)))
+        string[] new_arr_labels = array.from(array.get(arr_labels, array.get(sortedIndices, 0)))
+        new_idx = 0
+        for idx = 1 to array.size(sortedIndices)-1
+            cur_sorted_index = array.get(sortedIndices, idx)
+            prev_sorted_index = array.get(sortedIndices, idx-1)
+            if array.get(arr_levels, cur_sorted_index) == array.get(arr_levels, prev_sorted_index)
+                array.set(new_arr_labels, new_idx, array.get(new_arr_labels, new_idx)+","+array.get(arr_labels, cur_sorted_index))
+            else
+                array.push(new_arr_levels, array.get(arr_levels, cur_sorted_index))
+                array.push(new_arr_labels, array.get(arr_labels, cur_sorted_index))
+                new_idx := new_idx+1
+
+    // if barstate.islast and barstate.isconfirmed
+
+        for idx = 0 to array.size(new_arr_levels)-1
+            lvl = array.get(new_arr_levels, idx)
+            lbl = array.get(new_arr_labels, idx)
+            lbl_obj = array.get(arr_label_obj, idx)
+            line_obj = array.get(arr_line_obj, idx)
+            UpdateLine(line_obj, lvl)
+            UpdateLevelLabel(lbl_obj, lbl, lvl, 2*bar_padding)
+
+
+DrawLevelLine(level_to_plot, bar_padding, txt_label) =>
+    // if bar_index == last_bar_index - 1
+    
+    if barstate.islast
+    // if barstate.islast and barstate.isconfirmed
+        line.new(bar_index-bar_padding, level_to_plot, bar_index+bar_padding, level_to_plot, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
+        label.new(bar_index+bar_padding, level_to_plot, txt_label+" = "+str.tostring(level_to_plot), style = label.style_none, color=na, textcolor = color.white, textalign=text.align_left)
+
+GetSessionPivotLow(sessionTime, sessionTimeZone=syminfo.timezone, low_in, num_bars) =>
+    insideSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
+    pivot_low = ta.pivotlow(low_in, num_bars, num_bars)
+    not insideSession[num_bars] ? na : pivot_low
+
+GetSessionPivotHigh(sessionTime, sessionTimeZone=syminfo.timezone, high_in, num_bars) =>
+    insideSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
+    pivot_high = ta.pivothigh(high_in, num_bars, num_bars)
+    not insideSession[num_bars] ? na : pivot_high
+
+GetStrTimeAdded(start_time_24hr, start_time_min, num_min_to_be_added) =>
+    t = timestamp("GMT+1",2023,1,1,start_time_24hr,start_time_min)
+    t := t+num_min_to_be_added*60000
+    str.format_time(t, "HHmm", "GMT+1")
+
+GetEndTimeForPivot(start_time_24hr, start_time_min, numbar_in_currrent_chart_tf, target_tf_in_min) =>
+    retval = GetStrTimeAdded(15,30,numbar_in_currrent_chart_tf*timeframe.in_seconds()/60+(target_tf_in_min/timeframe.in_seconds()/60-1))
+
+numbar_pivot_1 = timeframe.in_seconds() < 61 ? 5 : 1000
+numbar_pivot_5_eth = timeframe.in_seconds() < 301 ? 4 * 300/timeframe.in_seconds() : 1000
+numbar_pivot_5_rth = timeframe.in_seconds() < 301 ? 2 * 300/timeframe.in_seconds() : 1000
+numbar_pivot_15 = timeframe.in_seconds() < 901 ? 2 * 900/timeframe.in_seconds() : 1000
+numbar_pivot_30 = timeframe.in_seconds() < 1801 ? 2 * 1800/timeframe.in_seconds() : 1000
+numbar_pivot_60 = timeframe.in_seconds() < 3601 ? 2 * 3600/timeframe.in_seconds() : 1000
+
+pivot_low_1 = GetSessionPivotLow("0000-2200", "GMT+1", low_1, numbar_pivot_1)
+pivot_low_1_rth = GetSessionPivotLow("1530-2200", "GMT+1", low_1, numbar_pivot_1)
+pivot_low_5 = GetSessionPivotLow("0004-2200", "GMT+1", low_5, numbar_pivot_5_eth)
+pivot_low_5_rth = GetSessionPivotLow("1534-2200", "GMT+1", low_5, numbar_pivot_5_rth)
+pivot_low_15 = GetSessionPivotLow("0014-2200", "GMT+1", low_15, numbar_pivot_15)
+pivot_low_15_rth = GetSessionPivotLow("1544-2200", "GMT+1", low_15, numbar_pivot_15)
+pivot_low_30 = GetSessionPivotLow("0029-2200", "GMT+1", low_30, numbar_pivot_30)
+pivot_low_30_rth = GetSessionPivotLow("1559-2200", "GMT+1", low_30, numbar_pivot_30)
+pivot_low_60 = GetSessionPivotLow("0059-2200", "GMT+1", low_60, numbar_pivot_60)
+pivot_low_60_rth = GetSessionPivotLow("1629-2200", "GMT+1", low_60, numbar_pivot_60)
+pivot_high_1 = GetSessionPivotHigh("0000-2200", "GMT+1", high_1, numbar_pivot_1)
+pivot_high_1_rth = GetSessionPivotHigh("1530-2200", "GMT+1", high_1, numbar_pivot_1)
+pivot_high_5 = GetSessionPivotHigh("0004-2200", "GMT+1", high_5, numbar_pivot_5_eth)
+pivot_high_5_rth = GetSessionPivotHigh("1534-2200", "GMT+1", high_5, numbar_pivot_5_rth)
+pivot_high_15 = GetSessionPivotHigh("0014-2200", "GMT+1", high_15, numbar_pivot_15)
+pivot_high_15_rth = GetSessionPivotHigh("1544-2200", "GMT+1", high_15, numbar_pivot_15)
+pivot_high_30 = GetSessionPivotHigh("0029-2200", "GMT+1", high_30, numbar_pivot_30)
+pivot_high_30_rth = GetSessionPivotHigh("1559-2200", "GMT+1", high_30, numbar_pivot_30)
+pivot_high_60 = GetSessionPivotHigh("0059-2200", "GMT+1", high_60, numbar_pivot_60)
+pivot_high_60_rth = GetSessionPivotHigh("1629-2200", "GMT+1", high_60, numbar_pivot_60)
+numbar_pivot = timeframe.in_seconds() < 61 ? 5 : timeframe.in_seconds() < 301 ? 4 : 2
+numbar_pivot_rth = timeframe.in_seconds() < 61 ? 5 : timeframe.in_seconds() < 301 ? 2 : 2
+pivot_low = GetSessionPivotLow("0000-2200", "GMT+1", low, numbar_pivot)
+pivot_low_rth = GetSessionPivotLow("1530-2200", "GMT+1", low, numbar_pivot_rth)
+pivot_high = GetSessionPivotHigh("0000-2200", "GMT+1", high, numbar_pivot)
+pivot_high_rth = GetSessionPivotHigh("1530-2200", "GMT+1", high, numbar_pivot_rth)
+[pwl,pwh] = request.security(syminfo.tickerid,"W", [low[1],high[1]], lookahead = barmerge.lookahead_on)
+[pdl_eth, pdl_eth_m1, pdl_eth_m2, pdl_eth_m3, pdl_eth_m4, pdh_eth, pdh_eth_m1, pdh_eth_m2, pdh_eth_m3, pdh_eth_m4] = request.security(syminfo.tickerid,"D", [low[1], low[2], low[3], low[4], low[5], high[1], high[2], high[3], high[4], high[5]], lookahead=barmerge.lookahead_on)
+cwl_tue = pdl_eth
+cwl_wed = math.min(pdl_eth, pdl_eth_m1)
+cwl_thu = math.min(pdl_eth, pdl_eth_m1, pdl_eth_m2)
+cwl_fri = math.min(pdl_eth, pdl_eth_m1, pdl_eth_m2, pdl_eth_m3)
+cwh_tue = pdh_eth
+cwh_wed = math.max(pdh_eth, pdh_eth_m1)
+cwh_thu = math.max(pdh_eth, pdh_eth_m1, pdh_eth_m2)
+cwh_fri = math.max(pdh_eth, pdh_eth_m1, pdh_eth_m2, pdh_eth_m3)
+dpl_eth = SessionLow("0000-2200", "GMT+1", low) // Pacific time: 6.30am to 1pm
+dph_eth = SessionHigh("0000-2200", "GMT+1", high) // Pacific time: 6.30am to 1pm
+pdl_rth = pdl_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
+pdh_rth = pdh_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
+
+
+is_allowed_bkdn_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1 // Pacific time: 5.30am to 9am
+is_allowed_false_bkdn_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
+is_allowed_bkout_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1// Pacific time: 5.30am to 9am
+is_allowed_false_bkout_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
+is_allowed_bkdn_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_false_bkdn_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_bkout_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_false_bkout_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_bkdn_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_false_bkdn_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_bkout_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_false_bkout_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_bkdn_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_false_bkdn_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_bkout_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_false_bkout_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_30
+is_allowed_bkdn_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_false_bkdn_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_bkout_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_false_bkout_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+
+bool is_bkdn_1_parent = false
+bool is_bkdn_5_parent = false
+bool is_bkdn_15_parent = false
+bool is_bkdn_30_parent = false
+bool is_bkdn_60_parent = false
+bool is_false_bkdn_1_parent = false
+bool is_false_bkdn_5_parent = false
+bool is_false_bkdn_15_parent = false
+bool is_false_bkdn_30_parent = false
+bool is_false_bkdn_60_parent = false
+bool is_bkout_1_parent = false
+bool is_bkout_5_parent = false
+bool is_bkout_15_parent = false
+bool is_bkout_30_parent = false
+bool is_bkout_60_parent = false
+bool is_false_bkout_1_parent = false
+bool is_false_bkout_5_parent = false
+bool is_false_bkout_15_parent = false
+bool is_false_bkout_30_parent = false
+bool is_false_bkout_60_parent = false
+bool is_bkdn = false
+bool is_false_bkdn = false
+bool is_bkdn_current_tf = false
+bool is_false_bkdn_current_tf = false
+bool is_bkout = false
+bool is_false_bkout = false
+bool is_bkout_current_tf = false
+bool is_false_bkout_current_tf = false
+string tooltip_bkdn = 'tbd'
+string tooltip_false_bkdn = 'tbd'
+string txt_bkdn_tf = ''
+string txt_false_bkdn_tf = ''
+string tooltip_bkout = 'tbd'
+string tooltip_false_bkout = 'tbd'
+string txt_bkout_tf = ''
+string txt_false_bkout_tf = ''
+bool is_explicit = level_selection == 'explicit'
+float opl_current_tf = na
+float dpl_rth_current_tf = na
+float oph_current_tf = na
+float dph_rth_current_tf = na
+float dummy_float = na
+day_of_week = dayofweek(time, "GMT+1")
+arr_label_obj_bkdn = array.from(labelobj_lvl_bkdn_a, labelobj_lvl_bkdn_b, labelobj_lvl_bkdn_c, labelobj_lvl_bkdn_d, labelobj_lvl_bkdn_e, labelobj_lvl_bkdn_f)
+arr_label_obj_bkout = array.from(labelobj_lvl_bkout_a, labelobj_lvl_bkout_b, labelobj_lvl_bkout_c, labelobj_lvl_bkout_d, labelobj_lvl_bkout_e, labelobj_lvl_bkout_f)
+arr_line_obj_bkdn = array.from(lineobj_lvl_bkdn_a, lineobj_lvl_bkdn_b, lineobj_lvl_bkdn_c, lineobj_lvl_bkdn_d, lineobj_lvl_bkdn_e, lineobj_lvl_bkdn_f)
+arr_line_obj_bkout = array.from(lineobj_lvl_bkout_a, lineobj_lvl_bkout_b, lineobj_lvl_bkout_c, lineobj_lvl_bkout_d, lineobj_lvl_bkout_e, lineobj_lvl_bkout_f)
+if is_explicit
+
+    // 2b false breakdown
+    [is_bkdn_1, is_false_bkdn_1, lvl_bkdn_1, lvl_bkh_1, lvl_ll_1] = Analyze2bBull_1(level_in_explicit)
+    [is_bkdn_5, is_false_bkdn_5, lvl_bkdn_5, lvl_bkh_5, lvl_ll_5] = Analyze2bBull_5(level_in_explicit)
+    [is_bkdn_15, is_false_bkdn_15, lvl_bkdn_15, lvl_bkh_15, lvl_ll_15] = Analyze2bBull_15(level_in_explicit)
+    [is_bkdn_30, is_false_bkdn_30, lvl_bkdn_30, lvl_bkh_30, lvl_ll_30] = Analyze2bBull_30(level_in_explicit)
+    [is_bkdn_60, is_false_bkdn_60, lvl_bkdn_60, lvl_bkh_60, lvl_ll_60] = Analyze2bBull_60(level_in_explicit)
+    is_bkdn_1 := is_bkdn_1 and is_allowed_bkdn_1
+    is_bkdn_5 := is_bkdn_5 and is_allowed_bkdn_5
+    is_bkdn_15 := is_bkdn_15 and is_allowed_bkdn_15
+    is_bkdn_30 := is_bkdn_30 and is_allowed_bkdn_30
+    is_bkdn_60 := is_bkdn_60 and is_allowed_bkdn_60
+    is_false_bkdn_1 := is_false_bkdn_1 and is_allowed_false_bkdn_1
+    is_false_bkdn_5 := is_false_bkdn_5 and is_allowed_false_bkdn_5
+    is_false_bkdn_15 := is_false_bkdn_15 and is_allowed_false_bkdn_15
+    is_false_bkdn_30 := is_false_bkdn_30 and is_allowed_false_bkdn_30
+    is_false_bkdn_60 := is_false_bkdn_60 and is_allowed_false_bkdn_60
+    
+    is_bkdn := is_bkdn_1 or is_bkdn_5 or is_bkdn_15 or is_bkdn_30 or is_bkdn_60
+    is_false_bkdn := is_false_bkdn_1 or is_false_bkdn_5 or is_false_bkdn_15 or is_false_bkdn_30 or is_false_bkdn_60
+    is_bkdn_current_tf := timeframe.period == "1" ? is_bkdn_1 : timeframe.period == "5"? is_bkdn_5 : timeframe.period == "15" ? is_bkdn_15 : timeframe.period == "30" ? is_bkdn_30 : is_bkdn_60
+    is_false_bkdn_current_tf := timeframe.period == "1" ? is_false_bkdn_1 : timeframe.period == "5"? is_false_bkdn_5 : timeframe.period == "15" ? is_false_bkdn_15 : timeframe.period == "30" ? is_false_bkdn_30 : is_false_bkdn_60
+
+    DrawLevelLine(level_in_explicit, 12, "explicit")
+    local_txt_bkdn_tf = (is_bkdn_1 ? "1," : "") + (is_bkdn_5 ? "5," : "") + (is_bkdn_15 ? "15," : "") + (is_bkdn_30 ? "30," : "") + (is_bkdn_60 ? "60" : "")
+    local_txt_false_bkdn_tf = (is_false_bkdn_1 ? "1," : "") + (is_false_bkdn_5 ? "5," : "") + (is_false_bkdn_15 ? "15," : "") + (is_false_bkdn_30 ? "30," : "") + (is_false_bkdn_60 ? "60" : "")
+    txt_bkdn_tf := (is_bkdn_1 ? "1\n" : "") + (is_bkdn_5 ? "5\n" : "") + (is_bkdn_15 ? "15\n" : "") + (is_bkdn_30 ? "30\n" : "") + (is_bkdn_60 ? "60" : "")
+    txt_false_bkdn_tf := (is_false_bkdn_1 ? "1\n" : "") + (is_false_bkdn_5 ? "5\n" : "") + (is_false_bkdn_15 ? "15\n" : "") + (is_false_bkdn_30 ? "30\n" : "") + (is_false_bkdn_60 ? "60" : "")
+    tooltip_bkdn := "2b bkdn explicit (" + str.tostring(level_in_explicit) + "), timeframe=" + local_txt_bkdn_tf
+    tooltip_false_bkdn := "alert: '2b false bkdn explicit (" + str.tostring(level_in_explicit) + ")', " + "entry: '" + str.tostring(close) + "', stop: '" + str.tostring(dpl_eth) + "', 'timeframe': " + local_txt_false_bkdn_tf
+
+    // 2b false breakout
+    [is_bkout_1, is_false_bkout_1, lvl_bkout_1, lvl_bkl_1, lvl_hh_1] = Analyze2bBear_1(level_in_explicit)
+    [is_bkout_5, is_false_bkout_5, lvl_bkout_5, lvl_bkl_5, lvl_hh_5] = Analyze2bBear_5(level_in_explicit)
+    [is_bkout_15, is_false_bkout_15, lvl_bkout_15, lvl_bkl_15, lvl_hh_15] = Analyze2bBear_15(level_in_explicit)
+    [is_bkout_30, is_false_bkout_30, lvl_bkout_30, lvl_bkl_30, lvl_hh_30] = Analyze2bBear_30(level_in_explicit)
+    [is_bkout_60, is_false_bkout_60, lvl_bkout_60, lvl_bkl_60, lvl_hh_60] = Analyze2bBear_60(level_in_explicit)
+    is_bkout_1 := is_bkout_1 and is_allowed_bkout_1
+    is_bkout_5 := is_bkout_5 and is_allowed_bkout_5
+    is_bkout_15 := is_bkout_15 and is_allowed_bkout_15
+    is_bkout_30 := is_bkout_30 and is_allowed_bkout_30
+    is_bkout_60 := is_bkout_60 and is_allowed_bkout_60
+    is_false_bkout_1 := is_false_bkout_1 and is_allowed_false_bkout_1
+    is_false_bkout_5 := is_false_bkout_5 and is_allowed_false_bkout_5
+    is_false_bkout_15 := is_false_bkout_15 and is_allowed_false_bkout_15
+    is_false_bkout_30 := is_false_bkout_30 and is_allowed_false_bkout_30
+    is_false_bkout_60 := is_false_bkout_60 and is_allowed_false_bkout_60
+    
+    is_bkout := is_bkout_1 or is_bkout_5 or is_bkout_15 or is_bkout_30 or is_bkout_60
+    is_false_bkout := is_false_bkout_1 or is_false_bkout_5 or is_false_bkout_15 or is_false_bkout_30 or is_false_bkout_60
+    is_bkout_current_tf := timeframe.period == "1" ? is_bkout_1 : timeframe.period == "5"? is_bkout_5 : timeframe.period == "15" ? is_bkout_15 : timeframe.period == "30" ? is_bkout_30 : is_bkout_60
+    is_false_bkout_current_tf := timeframe.period == "1" ? is_false_bkout_1 : timeframe.period == "5"? is_false_bkout_5 : timeframe.period == "15" ? is_false_bkout_15 : timeframe.period == "30" ? is_false_bkout_30 : is_false_bkout_60
+
+    DrawLevelLine(level_in_explicit, 12, "explicit")
+    local_txt_bkout_tf = (is_bkout_1 ? "1," : "") + (is_bkout_5 ? "5," : "") + (is_bkout_15 ? "15," : "") + (is_bkout_30 ? "30," : "") + (is_bkout_60 ? "60" : "")
+    local_txt_false_bkout_tf = (is_false_bkout_1 ? "1," : "") + (is_false_bkout_5 ? "5," : "") + (is_false_bkout_15 ? "15," : "") + (is_false_bkout_30 ? "30," : "") + (is_false_bkout_60 ? "60" : "")
+    txt_bkout_tf := (is_bkout_1 ? "1\n" : "") + (is_bkout_5 ? "5\n" : "") + (is_bkout_15 ? "15\n" : "") + (is_bkout_30 ? "30\n" : "") + (is_bkout_60 ? "60" : "")
+    txt_false_bkout_tf := (is_false_bkout_1 ? "1\n" : "") + (is_false_bkout_5 ? "5\n" : "") + (is_false_bkout_15 ? "15\n" : "") + (is_false_bkout_30 ? "30\n" : "") + (is_false_bkout_60 ? "60" : "")
+    tooltip_bkout := "2b bkout explicit (" + str.tostring(level_in_explicit) + "), timeframe=" + local_txt_bkout_tf
+    tooltip_false_bkout := "alert: '2b false bkout explicit (" + str.tostring(level_in_explicit) + ")', " + "entry: '" + str.tostring(close) + "', stop: '" + str.tostring(dpl_eth) + "', 'timeframe': " + local_txt_false_bkout_tf
+    is_bkdn_1_parent := is_bkdn_1
+    is_bkdn_5_parent := is_bkdn_5
+    is_bkdn_15_parent := is_bkdn_15
+    is_bkdn_30_parent := is_bkdn_30
+    is_bkdn_60_parent := is_bkdn_60
+    is_false_bkdn_1_parent := is_false_bkdn_1
+    is_false_bkdn_5_parent := is_false_bkdn_5
+    is_false_bkdn_15_parent := is_false_bkdn_15
+    is_false_bkdn_30_parent := is_false_bkdn_30
+    is_false_bkdn_60_parent := is_false_bkdn_60
+    is_bkout_1_parent := is_bkout_1
+    is_bkout_5_parent := is_bkout_5
+    is_bkout_15_parent := is_bkout_15
+    is_bkout_30_parent := is_bkout_30
+    is_bkout_60_parent := is_bkout_60
+    is_false_bkout_1_parent := is_false_bkout_1
+    is_false_bkout_5_parent := is_false_bkout_5
+    is_false_bkout_15_parent := is_false_bkout_15
+    is_false_bkout_30_parent := is_false_bkout_30
+    is_false_bkout_60_parent := is_false_bkout_60
+else if timeframe_selection == 'mtf'
+    // Get the session low
+    // Pacific time: 3pm prev day to 1pm next day, @ToDo-need to figure out how to set this to 2300 without bars failing
+    dpl_rth_1 = SessionLow("1530-2200", "GMT+1", pivot_low_1_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth_5 = SessionLow("1530-2200", "GMT+1", pivot_low_5_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth_15 = SessionLow("1530-2200", "GMT+1", pivot_low_15_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth_30 = SessionLow("1530-2200", "GMT+1", pivot_low_30_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth_60 = SessionLow("1530-2200", "GMT+1", pivot_low_60_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth_1 = SessionHigh("1530-2200", "GMT+1", pivot_high_1_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth_5 = SessionHigh("1530-2200", "GMT+1", pivot_high_5_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth_15 = SessionHigh("1530-2200", "GMT+1", pivot_high_15_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth_30 = SessionHigh("1530-2200", "GMT+1", pivot_high_30_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth_60 = SessionHigh("1530-2200", "GMT+1", pivot_high_60_rth, true) // Pacific time: 6.30am to 1pm
+
+    opl_1  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), "GMT+1", pivot_low_1)
+    opl_5  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), "GMT+1", pivot_low_5)
+    opl_15 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), "GMT+1", pivot_low_15)
+    opl_30 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), "GMT+1", pivot_low_30)
+    opl_60 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), "GMT+1", pivot_low_60)
+    oph_1  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), "GMT+1", pivot_high_1)
+    oph_5  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), "GMT+1", pivot_high_5)
+    oph_15 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), "GMT+1", pivot_high_15)
+    oph_30 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), "GMT+1", pivot_high_30)
+    oph_60 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), "GMT+1", pivot_high_60)
+
+    local_cwl_mon = dpl_eth
+    local_cwl_tue = math.min(local_cwl_mon, cwl_tue)
+    local_cwl_wed = math.min(local_cwl_tue, cwl_wed)
+    local_cwl_thu = math.min(local_cwl_wed, cwl_thu)
+    local_cwl_fri = math.min(local_cwl_thu, cwl_fri)
+    local_cwh_mon = dph_eth
+    local_cwh_tue = math.max(local_cwh_mon, cwh_tue)
+    local_cwh_wed = math.max(local_cwh_tue, cwh_wed)
+    local_cwh_thu = math.max(local_cwh_wed, cwh_thu)
+    local_cwh_fri = math.max(local_cwh_thu, cwh_fri)
+    cwl = day_of_week==dayofweek.monday ? local_cwl_mon : day_of_week==dayofweek.tuesday? local_cwl_tue : day_of_week==dayofweek.wednesday ? local_cwl_wed : day_of_week==dayofweek.thursday ? local_cwl_thu : local_cwl_fri
+    cwh = day_of_week==dayofweek.monday ? local_cwh_mon : day_of_week==dayofweek.tuesday? local_cwh_tue : day_of_week==dayofweek.wednesday ? local_cwh_wed : day_of_week==dayofweek.thursday ? local_cwh_thu : local_cwh_fri
+
+    arr_alerts_enabled = array.from(is_alert_enabled_pdl_pdh, is_alert_enabled_pdl_pdh, is_alert_enabled_dpl_dph, is_alert_enabled_opl_oph, is_alert_enabled_pwl_pwh, is_alert_enabled_cwl_cwh)
+
+    arr_levels_bkdn_1  = array.from(pdl_eth, pdl_rth, dpl_rth_1[1], opl_1[1], pwl, cwl)
+    arr_levels_bkdn_5  = array.from(pdl_eth, pdl_rth, dpl_rth_5[1], opl_5[1], pwl, cwl)
+    arr_levels_bkdn_15 = array.from(pdl_eth, pdl_rth, dpl_rth_15[1], opl_15[1], pwl, cwl)
+    arr_levels_bkdn_30 = array.from(pdl_eth, pdl_rth, dpl_rth_30[1], opl_30[1], pwl, cwl)
+    arr_levels_bkdn_60 = array.from(pdl_eth, pdl_rth, dpl_rth_60[1], opl_60[1], pwl, cwl)
+    arr_labels_bkdn = array.from('pdl_eth', 'pdl_rth', 'dpl_rth', 'opl', 'pwl', 'cwl')
+    
+    arr_levels_bkout_1  = array.from(pdh_eth, pdh_rth, dph_rth_1[1], oph_1[1], pwh, cwh)
+    arr_levels_bkout_5  = array.from(pdh_eth, pdh_rth, dph_rth_5[1], oph_5[1], pwh, cwh)
+    arr_levels_bkout_15 = array.from(pdh_eth, pdh_rth, dph_rth_15[1], oph_15[1], pwh, cwh)
+    arr_levels_bkout_30 = array.from(pdh_eth, pdh_rth, dph_rth_30[1], oph_30[1], pwh, cwh)
+    arr_levels_bkout_60 = array.from(pdh_eth, pdh_rth, dph_rth_60[1], oph_60[1], pwh, cwh)
+    arr_labels_bkout = array.from('pdh_eth', 'pdh_rth', 'dph_rth', 'oph', 'pwh', 'cwh')
+
+    // 
+    [is_bkdn_a_1, is_false_bkdn_a_1, lvl_bkdn_a_1, lvl_bkh_a_1, lvl_ll_a_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 0))
+    [is_bkdn_a_5, is_false_bkdn_a_5, lvl_bkdn_a_5, lvl_bkh_a_5, lvl_ll_a_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 0))
+    [is_bkdn_a_15, is_false_bkdn_a_15, lvl_bkdn_a_15, lvl_bkh_a_15, lvl_ll_a_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 0))
+    [is_bkdn_a_30, is_false_bkdn_a_30, lvl_bkdn_a_30, lvl_bkh_a_30, lvl_ll_a_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 0))
+    [is_bkdn_a_60, is_false_bkdn_a_60, lvl_bkdn_a_60, lvl_bkh_a_60, lvl_ll_a_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 0))
+    //
+    [is_bkdn_b_1, is_false_bkdn_b_1, lvl_bkdn_b_1, lvl_bkh_b_1, lvl_ll_b_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 1))
+    [is_bkdn_b_5, is_false_bkdn_b_5, lvl_bkdn_b_5, lvl_bkh_b_5, lvl_ll_b_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 1))
+    [is_bkdn_b_15, is_false_bkdn_b_15, lvl_bkdn_b_15, lvl_bkh_b_15, lvl_ll_b_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 1))
+    [is_bkdn_b_30, is_false_bkdn_b_30, lvl_bkdn_b_30, lvl_bkh_b_30, lvl_ll_b_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 1))
+    [is_bkdn_b_60, is_false_bkdn_b_60, lvl_bkdn_b_60, lvl_bkh_b_60, lvl_ll_b_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 1))
+    // 
+    [is_bkdn_c_1, is_false_bkdn_c_1, lvl_bkdn_c_1, lvl_bkh_c_1, lvl_ll_c_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 2))
+    [is_bkdn_c_5, is_false_bkdn_c_5, lvl_bkdn_c_5, lvl_bkh_c_5, lvl_ll_c_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 2))
+    [is_bkdn_c_15, is_false_bkdn_c_15, lvl_bkdn_c_15, lvl_bkh_c_15, lvl_ll_c_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 2))
+    [is_bkdn_c_30, is_false_bkdn_c_30, lvl_bkdn_c_30, lvl_bkh_c_30, lvl_ll_c_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 2))
+    [is_bkdn_c_60, is_false_bkdn_c_60, lvl_bkdn_c_60, lvl_bkh_c_60, lvl_ll_c_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 2))
+    //
+    [is_bkdn_d_1, is_false_bkdn_d_1, lvl_bkdn_d_1, lvl_bkh_d_1, lvl_ll_d_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 3))
+    [is_bkdn_d_5, is_false_bkdn_d_5, lvl_bkdn_d_5, lvl_bkh_d_5, lvl_ll_d_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 3))
+    [is_bkdn_d_15, is_false_bkdn_d_15, lvl_bkdn_d_15, lvl_bkh_d_15, lvl_ll_d_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 3))
+    [is_bkdn_d_30, is_false_bkdn_d_30, lvl_bkdn_d_30, lvl_bkh_d_30, lvl_ll_d_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 3))
+    [is_bkdn_d_60, is_false_bkdn_d_60, lvl_bkdn_d_60, lvl_bkh_d_60, lvl_ll_d_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 3))
+    // 
+    [is_bkdn_e_1, is_false_bkdn_e_1, lvl_bkdn_e_1, lvl_bkh_e_1, lvl_ll_e_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 4))
+    [is_bkdn_e_5, is_false_bkdn_e_5, lvl_bkdn_e_5, lvl_bkh_e_5, lvl_ll_e_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 4))
+    [is_bkdn_e_15, is_false_bkdn_e_15, lvl_bkdn_e_15, lvl_bkh_e_15, lvl_ll_e_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 4))
+    [is_bkdn_e_30, is_false_bkdn_e_30, lvl_bkdn_e_30, lvl_bkh_e_30, lvl_ll_e_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 4))
+    [is_bkdn_e_60, is_false_bkdn_e_60, lvl_bkdn_e_60, lvl_bkh_e_60, lvl_ll_e_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 4))
+    //
+    [is_bkdn_f_1, is_false_bkdn_f_1, lvl_bkdn_f_1, lvl_bkh_f_1, lvl_ll_f_1] = Analyze2bBull_1(array.get(arr_levels_bkdn_1, 5))
+    [is_bkdn_f_5, is_false_bkdn_f_5, lvl_bkdn_f_5, lvl_bkh_f_5, lvl_ll_f_5] = Analyze2bBull_5(array.get(arr_levels_bkdn_5, 5))
+    [is_bkdn_f_15, is_false_bkdn_f_15, lvl_bkdn_f_15, lvl_bkh_f_15, lvl_ll_f_15] = Analyze2bBull_15(array.get(arr_levels_bkdn_15, 5))
+    [is_bkdn_f_30, is_false_bkdn_f_30, lvl_bkdn_f_30, lvl_bkh_f_30, lvl_ll_f_30] = Analyze2bBull_30(array.get(arr_levels_bkdn_30, 5))
+    [is_bkdn_f_60, is_false_bkdn_f_60, lvl_bkdn_f_60, lvl_bkh_f_60, lvl_ll_f_60] = Analyze2bBull_60(array.get(arr_levels_bkdn_60, 5))
+
+    // 
+    [is_bkout_a_1, is_false_bkout_a_1, lvl_bkout_a_1, lvl_bkl_a_1, lvl_hh_a_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,0))
+    [is_bkout_a_5, is_false_bkout_a_5, lvl_bkout_a_5, lvl_bkl_a_5, lvl_hh_a_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,0))
+    [is_bkout_a_15, is_false_bkout_a_15, lvl_bkout_a_15, lvl_bkl_a_15, lvl_hh_a_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,0))
+    [is_bkout_a_30, is_false_bkout_a_30, lvl_bkout_a_30, lvl_bkl_a_30, lvl_hh_a_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,0))
+    [is_bkout_a_60, is_false_bkout_a_60, lvl_bkout_a_60, lvl_bkl_a_60, lvl_hh_a_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,0))
+    // 
+    [is_bkout_b_1, is_false_bkout_b_1, lvl_bkout_b_1, lvl_bkl_b_1, lvl_hh_b_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,1))
+    [is_bkout_b_5, is_false_bkout_b_5, lvl_bkout_b_5, lvl_bkl_b_5, lvl_hh_b_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,1))
+    [is_bkout_b_15, is_false_bkout_b_15, lvl_bkout_b_15, lvl_bkl_b_15, lvl_hh_b_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,1))
+    [is_bkout_b_30, is_false_bkout_b_30, lvl_bkout_b_30, lvl_bkl_b_30, lvl_hh_b_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,1))
+    [is_bkout_b_60, is_false_bkout_b_60, lvl_bkout_b_60, lvl_bkl_b_60, lvl_hh_b_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,1))
+    // 
+    [is_bkout_c_1, is_false_bkout_c_1, lvl_bkout_c_1, lvl_bkl_c_1, lvl_hh_c_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,2))
+    [is_bkout_c_5, is_false_bkout_c_5, lvl_bkout_c_5, lvl_bkl_c_5, lvl_hh_c_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,2))
+    [is_bkout_c_15, is_false_bkout_c_15, lvl_bkout_c_15, lvl_bkl_c_15, lvl_hh_c_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,2))
+    [is_bkout_c_30, is_false_bkout_c_30, lvl_bkout_c_30, lvl_bkl_c_30, lvl_hh_c_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,2))
+    [is_bkout_c_60, is_false_bkout_c_60, lvl_bkout_c_60, lvl_bkl_c_60, lvl_hh_c_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,2))
+    // 
+    [is_bkout_d_1, is_false_bkout_d_1, lvl_bkout_d_1, lvl_bkl_d_1, lvl_hh_d_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,3))
+    [is_bkout_d_5, is_false_bkout_d_5, lvl_bkout_d_5, lvl_bkl_d_5, lvl_hh_d_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,3))
+    [is_bkout_d_15, is_false_bkout_d_15, lvl_bkout_d_15, lvl_bkl_d_15, lvl_hh_d_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,3))
+    [is_bkout_d_30, is_false_bkout_d_30, lvl_bkout_d_30, lvl_bkl_d_30, lvl_hh_d_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,3))
+    [is_bkout_d_60, is_false_bkout_d_60, lvl_bkout_d_60, lvl_bkl_d_60, lvl_hh_d_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,3))
+    // 
+    [is_bkout_e_1, is_false_bkout_e_1, lvl_bkout_e_1, lvl_bkl_e_1, lvl_hh_e_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,4))
+    [is_bkout_e_5, is_false_bkout_e_5, lvl_bkout_e_5, lvl_bkl_e_5, lvl_hh_e_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,4))
+    [is_bkout_e_15, is_false_bkout_e_15, lvl_bkout_e_15, lvl_bkl_e_15, lvl_hh_e_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,4))
+    [is_bkout_e_30, is_false_bkout_e_30, lvl_bkout_e_30, lvl_bkl_e_30, lvl_hh_e_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,4))
+    [is_bkout_e_60, is_false_bkout_e_60, lvl_bkout_e_60, lvl_bkl_e_60, lvl_hh_e_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,4))
+    // 
+    [is_bkout_f_1, is_false_bkout_f_1, lvl_bkout_f_1, lvl_bkl_f_1, lvl_hh_f_1] = Analyze2bBear_1(array.get(arr_levels_bkout_1,5))
+    [is_bkout_f_5, is_false_bkout_f_5, lvl_bkout_f_5, lvl_bkl_f_5, lvl_hh_f_5] = Analyze2bBear_5(array.get(arr_levels_bkout_5,5))
+    [is_bkout_f_15, is_false_bkout_f_15, lvl_bkout_f_15, lvl_bkl_f_15, lvl_hh_f_15] = Analyze2bBear_15(array.get(arr_levels_bkout_15,5))
+    [is_bkout_f_30, is_false_bkout_f_30, lvl_bkout_f_30, lvl_bkl_f_30, lvl_hh_f_30] = Analyze2bBear_30(array.get(arr_levels_bkout_30,5))
+    [is_bkout_f_60, is_false_bkout_f_60, lvl_bkout_f_60, lvl_bkl_f_60, lvl_hh_f_60] = Analyze2bBear_60(array.get(arr_levels_bkout_60,5))
+
+
+    bool[] arr_is_bkdn_1 = array.from(is_bkdn_a_1, is_bkdn_b_1, is_bkdn_c_1, is_bkdn_d_1, is_bkdn_e_1, is_bkdn_f_1)    
+    bool[] arr_is_bkdn_5 = array.from(is_bkdn_a_5, is_bkdn_b_5, is_bkdn_c_5, is_bkdn_d_5, is_bkdn_e_5, is_bkdn_f_5)    
+    bool[] arr_is_bkdn_15 = array.from(is_bkdn_a_15, is_bkdn_b_15, is_bkdn_c_15, is_bkdn_d_15, is_bkdn_e_15, is_bkdn_f_15)    
+    bool[] arr_is_bkdn_30 = array.from(is_bkdn_a_30, is_bkdn_b_30, is_bkdn_c_30, is_bkdn_d_30, is_bkdn_e_30, is_bkdn_f_30)    
+    bool[] arr_is_bkdn_60 = array.from(is_bkdn_a_60, is_bkdn_b_60, is_bkdn_c_60, is_bkdn_d_60, is_bkdn_e_60, is_bkdn_f_60)    
+    bool[] arr_is_false_bkdn_1 = array.from(is_false_bkdn_a_1, is_false_bkdn_b_1, is_false_bkdn_c_1, is_false_bkdn_d_1, is_false_bkdn_e_1, is_false_bkdn_f_1)    
+    bool[] arr_is_false_bkdn_5 = array.from(is_false_bkdn_a_5, is_false_bkdn_b_5, is_false_bkdn_c_5, is_false_bkdn_d_5, is_false_bkdn_e_5, is_false_bkdn_f_5)    
+    bool[] arr_is_false_bkdn_15 = array.from(is_false_bkdn_a_15, is_false_bkdn_b_15, is_false_bkdn_c_15, is_false_bkdn_d_15, is_false_bkdn_e_15, is_false_bkdn_f_15)    
+    bool[] arr_is_false_bkdn_30 = array.from(is_false_bkdn_a_30, is_false_bkdn_b_30, is_false_bkdn_c_30, is_false_bkdn_d_30, is_false_bkdn_e_30, is_false_bkdn_f_30)    
+    bool[] arr_is_false_bkdn_60 = array.from(is_false_bkdn_a_60, is_false_bkdn_b_60, is_false_bkdn_c_60, is_false_bkdn_d_60, is_false_bkdn_e_60, is_false_bkdn_f_60)    
+    float[] arr_lvl_bkdn_1 = array.from(lvl_bkdn_a_1, lvl_bkdn_b_1, lvl_bkdn_c_1, lvl_bkdn_d_1, lvl_bkdn_e_1, lvl_bkdn_f_1)    
+    float[] arr_lvl_bkdn_5 = array.from(lvl_bkdn_a_5, lvl_bkdn_b_5, lvl_bkdn_c_5, lvl_bkdn_d_5, lvl_bkdn_e_5, lvl_bkdn_f_5)    
+    float[] arr_lvl_bkdn_15 = array.from(lvl_bkdn_a_15, lvl_bkdn_b_15, lvl_bkdn_c_15, lvl_bkdn_d_15, lvl_bkdn_e_15, lvl_bkdn_f_15)    
+    float[] arr_lvl_bkdn_30 = array.from(lvl_bkdn_a_30, lvl_bkdn_b_30, lvl_bkdn_c_30, lvl_bkdn_d_30, lvl_bkdn_e_30, lvl_bkdn_f_30)    
+    float[] arr_lvl_bkdn_60 = array.from(lvl_bkdn_a_60, lvl_bkdn_b_60, lvl_bkdn_c_60, lvl_bkdn_d_60, lvl_bkdn_e_60, lvl_bkdn_f_60)    
+    float[] arr_lvl_bkh_1 = array.from(lvl_bkh_a_1, lvl_bkh_b_1, lvl_bkh_c_1, lvl_bkh_d_1, lvl_bkh_e_1, lvl_bkh_f_1)    
+    float[] arr_lvl_bkh_5 = array.from(lvl_bkh_a_5, lvl_bkh_b_5, lvl_bkh_c_5, lvl_bkh_d_5, lvl_bkh_e_5, lvl_bkh_f_5)    
+    float[] arr_lvl_bkh_15 = array.from(lvl_bkh_a_15, lvl_bkh_b_15, lvl_bkh_c_15, lvl_bkh_d_15, lvl_bkh_e_15, lvl_bkh_f_15)    
+    float[] arr_lvl_bkh_30 = array.from(lvl_bkh_a_30, lvl_bkh_b_30, lvl_bkh_c_30, lvl_bkh_d_30, lvl_bkh_e_30, lvl_bkh_f_30)    
+    float[] arr_lvl_bkh_60 = array.from(lvl_bkh_a_60, lvl_bkh_b_60, lvl_bkh_c_60, lvl_bkh_d_60, lvl_bkh_e_60, lvl_bkh_f_60)    
+    float[] arr_lvl_ll_1 = array.from(lvl_ll_a_1, lvl_ll_b_1, lvl_ll_c_1, lvl_ll_d_1, lvl_ll_e_1, lvl_ll_f_1)    
+    float[] arr_lvl_ll_5 = array.from(lvl_ll_a_5, lvl_ll_b_5, lvl_ll_c_5, lvl_ll_d_5, lvl_ll_e_5, lvl_ll_f_5)    
+    float[] arr_lvl_ll_15 = array.from(lvl_ll_a_15, lvl_ll_b_15, lvl_ll_c_15, lvl_ll_d_15, lvl_ll_e_15, lvl_ll_f_15)    
+    float[] arr_lvl_ll_30 = array.from(lvl_ll_a_30, lvl_ll_b_30, lvl_ll_c_30, lvl_ll_d_30, lvl_ll_e_30, lvl_ll_f_30)    
+    float[] arr_lvl_ll_60 = array.from(lvl_ll_a_60, lvl_ll_b_60, lvl_ll_c_60, lvl_ll_d_60, lvl_ll_e_60, lvl_ll_f_60)    
+
+    is_bkdn_1 = false
+    is_bkdn_5 = false
+    is_bkdn_15 = false
+    is_bkdn_30 = false
+    is_bkdn_60 = false
+    is_false_bkdn_1 = false
+    is_false_bkdn_5 = false
+    is_false_bkdn_15 = false
+    is_false_bkdn_30 = false
+    is_false_bkdn_60 = false
+    for idx = 0 to array.size(arr_levels_bkdn_1)-1
+        array.set(arr_is_bkdn_1, idx, array.get(arr_is_bkdn_1, idx) and is_allowed_bkdn_1)
+        array.set(arr_is_bkdn_5, idx, array.get(arr_is_bkdn_5, idx) and is_allowed_bkdn_5)
+        array.set(arr_is_bkdn_15, idx, array.get(arr_is_bkdn_15, idx) and is_allowed_bkdn_15)
+        array.set(arr_is_bkdn_30, idx, array.get(arr_is_bkdn_30, idx) and is_allowed_bkdn_30)
+        array.set(arr_is_bkdn_60, idx, array.get(arr_is_bkdn_60, idx) and is_allowed_bkdn_60)
+        is_bkdn_1 := is_bkdn_1 or (array.get(arr_is_bkdn_1,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkdn_5 := is_bkdn_5 or (array.get(arr_is_bkdn_5,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkdn_15 := is_bkdn_15 or (array.get(arr_is_bkdn_15,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkdn_30 := is_bkdn_30 or (array.get(arr_is_bkdn_30,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkdn_60 := is_bkdn_60 or (array.get(arr_is_bkdn_60,idx) and array.get(arr_alerts_enabled,idx))
+        array.set(arr_is_false_bkdn_1, idx, array.get(arr_is_false_bkdn_1, idx) and is_allowed_false_bkdn_1)
+        array.set(arr_is_false_bkdn_5, idx, array.get(arr_is_false_bkdn_5, idx) and is_allowed_false_bkdn_5)
+        array.set(arr_is_false_bkdn_15, idx, array.get(arr_is_false_bkdn_15, idx) and is_allowed_false_bkdn_15)
+        array.set(arr_is_false_bkdn_30, idx, array.get(arr_is_false_bkdn_30, idx) and is_allowed_false_bkdn_30)
+        array.set(arr_is_false_bkdn_60, idx, array.get(arr_is_false_bkdn_60, idx) and is_allowed_false_bkdn_60)
+        is_false_bkdn_1 := is_false_bkdn_1 or (array.get(arr_is_false_bkdn_1,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkdn_5 := is_false_bkdn_5 or (array.get(arr_is_false_bkdn_5,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkdn_15 := is_false_bkdn_15 or (array.get(arr_is_false_bkdn_15,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkdn_30 := is_false_bkdn_30 or (array.get(arr_is_false_bkdn_30,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkdn_60 := is_false_bkdn_60 or (array.get(arr_is_false_bkdn_60,idx) and array.get(arr_alerts_enabled,idx))
+
+    is_bkdn := is_bkdn_1 or is_bkdn_5 or is_bkdn_15 or is_bkdn_30 or is_bkdn_60
+    is_false_bkdn := is_false_bkdn_1 or is_false_bkdn_5 or is_false_bkdn_15 or is_false_bkdn_30 or is_false_bkdn_60
+
+
+    is_bkdn_current_tf := timeframe.period == "1" ? is_bkdn_1 : timeframe.period == "5"? is_bkdn_5 : timeframe.period == "15" ? is_bkdn_15 : timeframe.period == "30" ? is_bkdn_30 : is_bkdn_60
+    is_false_bkdn_current_tf := timeframe.period == "1" ? is_false_bkdn_1 : timeframe.period == "5"? is_false_bkdn_5 : timeframe.period == "15" ? is_false_bkdn_15 : timeframe.period == "30" ? is_false_bkdn_30 : is_false_bkdn_60
+    opl_current_tf := timeframe.period == "1" ? opl_1 : timeframe.period == "5"? opl_5 : timeframe.period == "15" ? opl_15 : timeframe.period == "30" ? opl_30 : opl_60
+	dpl_rth_current_tf := timeframe.period == "1" ? dpl_rth_1 : timeframe.period == "5"? dpl_rth_5 : timeframe.period == "15" ? dpl_rth_15 : timeframe.period == "30" ? dpl_rth_30 : dpl_rth_60
+
+    tooltip_bkdn_1 = GetLabel("1", arr_is_bkdn_1, arr_labels_bkdn, arr_lvl_bkdn_1, na, na)
+    tooltip_bkdn_5 = GetLabel("5", arr_is_bkdn_5, arr_labels_bkdn, arr_lvl_bkdn_5, na, na)
+    tooltip_bkdn_15 = GetLabel("15", arr_is_bkdn_15, arr_labels_bkdn, arr_lvl_bkdn_15, na, na)
+    tooltip_bkdn_30 = GetLabel("30", arr_is_bkdn_30, arr_labels_bkdn, arr_lvl_bkdn_30, na, na)
+    tooltip_bkdn_60 = GetLabel("60", arr_is_bkdn_60, arr_labels_bkdn, arr_lvl_bkdn_60, na, na)
+    tooltip_false_bkdn_1 = GetLabel("1", arr_is_false_bkdn_1, arr_labels_bkdn, arr_lvl_bkdn_1, arr_lvl_bkh_1, arr_lvl_ll_1)
+    tooltip_false_bkdn_5 = GetLabel("5", arr_is_false_bkdn_5, arr_labels_bkdn, arr_lvl_bkdn_5, arr_lvl_bkh_5, arr_lvl_ll_5)
+    tooltip_false_bkdn_15 = GetLabel("15", arr_is_false_bkdn_15, arr_labels_bkdn, arr_lvl_bkdn_15, arr_lvl_bkh_15, arr_lvl_ll_15)
+    tooltip_false_bkdn_30 = GetLabel("30", arr_is_false_bkdn_30, arr_labels_bkdn, arr_lvl_bkdn_30, arr_lvl_bkh_30, arr_lvl_ll_30)
+    tooltip_false_bkdn_60 = GetLabel("60", arr_is_false_bkdn_60, arr_labels_bkdn, arr_lvl_bkdn_60, arr_lvl_bkh_60, arr_lvl_ll_60)
+
+    txt_bkdn_tf := (is_bkdn_1 ? "1\n" : "") + (is_bkdn_5 ? "5\n" : "") + (is_bkdn_15 ? "15\n" : "") + (is_bkdn_30 ? "30\n" : "") + (is_bkdn_60 ? "60" : "")
+    txt_false_bkdn_tf := (is_false_bkdn_1 ? "1\n" : "") + (is_false_bkdn_5 ? "5\n" : "") + (is_false_bkdn_15 ? "15\n" : "") + (is_false_bkdn_30 ? "30\n" : "") + (is_false_bkdn_60 ? "60" : "")
+    txt_bkdn_tf_detail = ConcatMTFToolTip(tooltip_bkdn_1, tooltip_bkdn_5, tooltip_bkdn_15, tooltip_bkdn_30, tooltip_bkdn_60)
+    txt_false_bkdn_tf_detail = ConcatMTFToolTip(tooltip_false_bkdn_1, tooltip_false_bkdn_5, tooltip_false_bkdn_15, tooltip_false_bkdn_30, tooltip_false_bkdn_60)
+    tooltip_bkdn := "2b bkdn auto\n"+txt_bkdn_tf_detail
+    tooltip_false_bkdn := "2b false bkdn auto\n" + txt_false_bkdn_tf_detail +"\ntf: level, best-entry, stop:\n" 
+    
+    bool[] arr_is_bkout_1 = array.from(is_bkout_a_1, is_bkout_b_1, is_bkout_c_1, is_bkout_d_1, is_bkout_e_1, is_bkout_f_1)    
+    bool[] arr_is_bkout_5 = array.from(is_bkout_a_5, is_bkout_b_5, is_bkout_c_5, is_bkout_d_5, is_bkout_e_5, is_bkout_f_5)    
+    bool[] arr_is_bkout_15 = array.from(is_bkout_a_15, is_bkout_b_15, is_bkout_c_15, is_bkout_d_15, is_bkout_e_15, is_bkout_f_15)    
+    bool[] arr_is_bkout_30 = array.from(is_bkout_a_30, is_bkout_b_30, is_bkout_c_30, is_bkout_d_30, is_bkout_e_30, is_bkout_f_30)    
+    bool[] arr_is_bkout_60 = array.from(is_bkout_a_60, is_bkout_b_60, is_bkout_c_60, is_bkout_d_60, is_bkout_e_60, is_bkout_f_60)    
+    bool[] arr_is_false_bkout_1 = array.from(is_false_bkout_a_1, is_false_bkout_b_1, is_false_bkout_c_1, is_false_bkout_d_1, is_false_bkout_e_1, is_false_bkout_f_1)    
+    bool[] arr_is_false_bkout_5 = array.from(is_false_bkout_a_5, is_false_bkout_b_5, is_false_bkout_c_5, is_false_bkout_d_5, is_false_bkout_e_5, is_false_bkout_f_5)    
+    bool[] arr_is_false_bkout_15 = array.from(is_false_bkout_a_15, is_false_bkout_b_15, is_false_bkout_c_15, is_false_bkout_d_15, is_false_bkout_e_15, is_false_bkout_f_15)    
+    bool[] arr_is_false_bkout_30 = array.from(is_false_bkout_a_30, is_false_bkout_b_30, is_false_bkout_c_30, is_false_bkout_d_30, is_false_bkout_e_30, is_false_bkout_f_30)    
+    bool[] arr_is_false_bkout_60 = array.from(is_false_bkout_a_60, is_false_bkout_b_60, is_false_bkout_c_60, is_false_bkout_d_60, is_false_bkout_e_60, is_false_bkout_f_60)    
+    float[] arr_lvl_bkout_1 = array.from(lvl_bkout_a_1, lvl_bkout_b_1, lvl_bkout_c_1, lvl_bkout_d_1, lvl_bkout_e_1, lvl_bkout_f_1)    
+    float[] arr_lvl_bkout_5 = array.from(lvl_bkout_a_5, lvl_bkout_b_5, lvl_bkout_c_5, lvl_bkout_d_5, lvl_bkout_e_5, lvl_bkout_f_5)    
+    float[] arr_lvl_bkout_15 = array.from(lvl_bkout_a_15, lvl_bkout_b_15, lvl_bkout_c_15, lvl_bkout_d_15, lvl_bkout_e_15, lvl_bkout_f_15)    
+    float[] arr_lvl_bkout_30 = array.from(lvl_bkout_a_30, lvl_bkout_b_30, lvl_bkout_c_30, lvl_bkout_d_30, lvl_bkout_e_30, lvl_bkout_f_30)    
+    float[] arr_lvl_bkout_60 = array.from(lvl_bkout_a_60, lvl_bkout_b_60, lvl_bkout_c_60, lvl_bkout_d_60, lvl_bkout_e_60, lvl_bkout_f_60)    
+    float[] arr_lvl_bkl_1 = array.from(lvl_bkl_a_1, lvl_bkl_b_1, lvl_bkl_c_1, lvl_bkl_d_1, lvl_bkl_e_1, lvl_bkl_f_1)    
+    float[] arr_lvl_bkl_5 = array.from(lvl_bkl_a_5, lvl_bkl_b_5, lvl_bkl_c_5, lvl_bkl_d_5, lvl_bkl_e_5, lvl_bkl_f_5)    
+    float[] arr_lvl_bkl_15 = array.from(lvl_bkl_a_15, lvl_bkl_b_15, lvl_bkl_c_15, lvl_bkl_d_15, lvl_bkl_e_15, lvl_bkl_f_15)    
+    float[] arr_lvl_bkl_30 = array.from(lvl_bkl_a_30, lvl_bkl_b_30, lvl_bkl_c_30, lvl_bkl_d_30, lvl_bkl_e_30, lvl_bkl_f_30)    
+    float[] arr_lvl_bkl_60 = array.from(lvl_bkl_a_60, lvl_bkl_b_60, lvl_bkl_c_60, lvl_bkl_d_60, lvl_bkl_e_60, lvl_bkl_f_60)    
+    float[] arr_lvl_hh_1 = array.from(lvl_hh_a_1, lvl_hh_b_1, lvl_hh_c_1, lvl_hh_d_1, lvl_hh_e_1, lvl_hh_f_1)    
+    float[] arr_lvl_hh_5 = array.from(lvl_hh_a_5, lvl_hh_b_5, lvl_hh_c_5, lvl_hh_d_5, lvl_hh_e_5, lvl_hh_f_5)    
+    float[] arr_lvl_hh_15 = array.from(lvl_hh_a_15, lvl_hh_b_15, lvl_hh_c_15, lvl_hh_d_15, lvl_hh_e_15, lvl_hh_f_15)    
+    float[] arr_lvl_hh_30 = array.from(lvl_hh_a_30, lvl_hh_b_30, lvl_hh_c_30, lvl_hh_d_30, lvl_hh_e_30, lvl_hh_f_30)    
+    float[] arr_lvl_hh_60 = array.from(lvl_hh_a_60, lvl_hh_b_60, lvl_hh_c_60, lvl_hh_d_60, lvl_hh_e_60, lvl_hh_f_60)    
+
+    is_bkout_1 = false
+    is_bkout_5 = false
+    is_bkout_15 = false
+    is_bkout_30 = false
+    is_bkout_60 = false
+    is_false_bkout_1 = false
+    is_false_bkout_5 = false
+    is_false_bkout_15 = false
+    is_false_bkout_30 = false
+    is_false_bkout_60 = false
+    for idx = 0 to array.size(arr_levels_bkdn_1)-1
+        array.set(arr_is_bkout_1, idx, array.get(arr_is_bkout_1, idx) and is_allowed_bkout_1)
+        array.set(arr_is_bkout_5, idx, array.get(arr_is_bkout_5, idx) and is_allowed_bkout_5)
+        array.set(arr_is_bkout_15, idx, array.get(arr_is_bkout_15, idx) and is_allowed_bkout_15)
+        array.set(arr_is_bkout_30, idx, array.get(arr_is_bkout_30, idx) and is_allowed_bkout_30)
+        array.set(arr_is_bkout_60, idx, array.get(arr_is_bkout_60, idx) and is_allowed_bkout_60)
+        is_bkout_1 := is_bkout_1 or (array.get(arr_is_bkout_1,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkout_5 := is_bkout_5 or (array.get(arr_is_bkout_5,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkout_15 := is_bkout_15 or (array.get(arr_is_bkout_15,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkout_30 := is_bkout_30 or (array.get(arr_is_bkout_30,idx) and array.get(arr_alerts_enabled,idx))
+        is_bkout_60 := is_bkout_60 or (array.get(arr_is_bkout_60,idx) and array.get(arr_alerts_enabled,idx))
+        array.set(arr_is_false_bkout_1, idx, array.get(arr_is_false_bkout_1, idx) and is_allowed_false_bkout_1)
+        array.set(arr_is_false_bkout_5, idx, array.get(arr_is_false_bkout_5, idx) and is_allowed_false_bkout_5)
+        array.set(arr_is_false_bkout_15, idx, array.get(arr_is_false_bkout_15, idx) and is_allowed_false_bkout_15)
+        array.set(arr_is_false_bkout_30, idx, array.get(arr_is_false_bkout_30, idx) and is_allowed_false_bkout_30)
+        array.set(arr_is_false_bkout_60, idx, array.get(arr_is_false_bkout_60, idx) and is_allowed_false_bkout_60)
+        is_false_bkout_1 := is_false_bkout_1 or (array.get(arr_is_false_bkout_1,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkout_5 := is_false_bkout_5 or (array.get(arr_is_false_bkout_5,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkout_15 := is_false_bkout_15 or (array.get(arr_is_false_bkout_15,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkout_30 := is_false_bkout_30 or (array.get(arr_is_false_bkout_30,idx) and array.get(arr_alerts_enabled,idx))
+        is_false_bkout_60 := is_false_bkout_60 or (array.get(arr_is_false_bkout_60,idx) and array.get(arr_alerts_enabled,idx))
+
+    is_bkout := is_bkout_1 or is_bkout_5 or is_bkout_15 or is_bkout_30 or is_bkout_60
+    is_false_bkout := is_false_bkout_1 or is_false_bkout_5 or is_false_bkout_15 or is_false_bkout_30 or is_false_bkout_60
+
+    is_bkout_current_tf := timeframe.period == "1" ? is_bkout_1 : timeframe.period == "5"? is_bkout_5 : timeframe.period == "15" ? is_bkout_15 : timeframe.period == "30" ? is_bkout_30 : is_bkout_60
+    is_false_bkout_current_tf := timeframe.period == "1" ? is_false_bkout_1 : timeframe.period == "5"? is_false_bkout_5 : timeframe.period == "15" ? is_false_bkout_15 : timeframe.period == "30" ? is_false_bkout_30 : is_false_bkout_60
+    oph_current_tf := timeframe.period == "1" ? oph_1 : timeframe.period == "5"? oph_5 : timeframe.period == "15" ? oph_15 : timeframe.period == "30" ? oph_30 : oph_60
+	dph_rth_current_tf := timeframe.period == "1" ? dph_rth_1 : timeframe.period == "5"? dph_rth_5 : timeframe.period == "15" ? dph_rth_15 : timeframe.period == "30" ? dph_rth_30 : dph_rth_60
+
+    tooltip_bkout_1 = GetLabel("1", arr_is_bkout_1, arr_labels_bkout, arr_lvl_bkout_1, na, na)
+    tooltip_bkout_5 = GetLabel("5", arr_is_bkout_5, arr_labels_bkout, arr_lvl_bkout_5, na, na)
+    tooltip_bkout_15 = GetLabel("15", arr_is_bkout_15, arr_labels_bkout, arr_lvl_bkout_15, na, na)
+    tooltip_bkout_30 = GetLabel("30", arr_is_bkout_30, arr_labels_bkout, arr_lvl_bkout_30, na, na)
+    tooltip_bkout_60 = GetLabel("60", arr_is_bkout_60, arr_labels_bkout, arr_lvl_bkout_60, na, na)
+    tooltip_false_bkout_1 = GetLabel("1", arr_is_false_bkout_1, arr_labels_bkout, arr_lvl_bkout_1, arr_lvl_bkl_1, arr_lvl_hh_1)
+    tooltip_false_bkout_5 = GetLabel("5", arr_is_false_bkout_5, arr_labels_bkout, arr_lvl_bkout_5, arr_lvl_bkl_5, arr_lvl_hh_5)
+    tooltip_false_bkout_15 = GetLabel("15", arr_is_false_bkout_15, arr_labels_bkout, arr_lvl_bkout_15, arr_lvl_bkl_15, arr_lvl_hh_15)
+    tooltip_false_bkout_30 = GetLabel("30", arr_is_false_bkout_30, arr_labels_bkout, arr_lvl_bkout_30, arr_lvl_bkl_30, arr_lvl_hh_30)
+    tooltip_false_bkout_60 = GetLabel("60", arr_is_false_bkout_60, arr_labels_bkout, arr_lvl_bkout_60, arr_lvl_bkl_60, arr_lvl_hh_60)
+
+    txt_bkout_tf := (is_bkout_1 ? "1\n" : "") + (is_bkout_5 ? "5\n" : "") + (is_bkout_15 ? "15\n" : "") + (is_bkout_30 ? "30\n" : "") + (is_bkout_60 ? "60" : "")
+    txt_false_bkout_tf := (is_false_bkout_1 ? "1\n" : "") + (is_false_bkout_5 ? "5\n" : "") + (is_false_bkout_15 ? "15\n" : "") + (is_false_bkout_30 ? "30\n" : "") + (is_false_bkout_60 ? "60" : "")
+    txt_bkout_tf_detail = ConcatMTFToolTip(tooltip_bkout_1, tooltip_bkout_5, tooltip_bkout_15, tooltip_bkout_30, tooltip_bkout_60)
+    txt_false_bkout_tf_detail = ConcatMTFToolTip(tooltip_false_bkout_1, tooltip_false_bkout_5, tooltip_false_bkout_15, tooltip_false_bkout_30, tooltip_false_bkout_60)
+    tooltip_bkout := "2b bkout auto\n"+txt_bkout_tf_detail
+    tooltip_false_bkout := "2b false bkout auto\n" + txt_false_bkout_tf_detail +"\ntf: level, best-entry, stop:\n" 
+
+    // Plot all the lows as dashed lines
+    arr_levels_bkdn_to_draw = timeframe.period == "1" ? arr_levels_bkdn_1 : timeframe.period == "5" ? arr_levels_bkdn_5 : timeframe.period == "15" ? arr_levels_bkdn_15 : timeframe.period == "30" ? arr_levels_bkdn_30 : timeframe.period == "60" ? arr_levels_bkdn_60 : arr_levels_bkdn_1
+    DrawLevelLine_arr(arr_line_obj_bkdn, arr_label_obj_bkdn, arr_levels_bkdn_to_draw, arr_labels_bkdn, 12)
+    arr_levels_bkout_to_draw = timeframe.period == "1" ? arr_levels_bkout_1 : timeframe.period == "5" ? arr_levels_bkout_5 : timeframe.period == "15" ? arr_levels_bkout_15 : timeframe.period == "30" ? arr_levels_bkout_30 : timeframe.period == "60" ? arr_levels_bkout_60 : arr_levels_bkout_1
+    DrawLevelLine_arr(arr_line_obj_bkout, arr_label_obj_bkout, arr_levels_bkout_to_draw, arr_labels_bkout, 12)
+    
+    is_bkdn_1_parent := is_bkdn_1
+    is_bkdn_5_parent := is_bkdn_5
+    is_bkdn_15_parent := is_bkdn_15
+    is_bkdn_30_parent := is_bkdn_30
+    is_bkdn_60_parent := is_bkdn_60
+    is_false_bkdn_1_parent := is_false_bkdn_1
+    is_false_bkdn_5_parent := is_false_bkdn_5
+    is_false_bkdn_15_parent := is_false_bkdn_15
+    is_false_bkdn_30_parent := is_false_bkdn_30
+    is_false_bkdn_60_parent := is_false_bkdn_60
+    is_bkout_1_parent := is_bkout_1
+    is_bkout_5_parent := is_bkout_5
+    is_bkout_15_parent := is_bkout_15
+    is_bkout_30_parent := is_bkout_30
+    is_bkout_60_parent := is_bkout_60
+    is_false_bkout_1_parent := is_false_bkout_1
+    is_false_bkout_5_parent := is_false_bkout_5
+    is_false_bkout_15_parent := is_false_bkout_15
+    is_false_bkout_30_parent := is_false_bkout_30
+    is_false_bkout_60_parent := is_false_bkout_60
+
+else if timeframe_selection == "chart"
+    // Get the session low
+    // Pacific time: 3pm prev day to 1pm next day, @ToDo-need to figure out how to set this to 2300 without bars failing
+    dpl_rth = SessionLow("1530-2200", "GMT+1", pivot_low_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth = SessionHigh("1530-2200", "GMT+1", pivot_high_rth, true) // Pacific time: 6.30am to 1pm
+    //test_level_to_plot := dpl_rth
+    opl = SessionLow("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), "GMT+1", pivot_low) // Pacific time: 3pm prev day to 6.30 next day, overnight session, +5mins added since pivot low has 5 lookback bars
+    oph = SessionHigh("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), "GMT+1", pivot_high) // Pacific time: 3pm prev day to 6.30 next day, overnight session
+
+    local_cwl_mon = dpl_eth
+    local_cwl_tue = math.min(local_cwl_mon, cwl_tue)
+    local_cwl_wed = math.min(local_cwl_tue, cwl_wed)
+    local_cwl_thu = math.min(local_cwl_wed, cwl_thu)
+    local_cwl_fri = math.min(local_cwl_thu, cwl_fri)
+    local_cwh_mon = dph_eth
+    local_cwh_tue = math.max(local_cwh_mon, cwh_tue)
+    local_cwh_wed = math.max(local_cwh_tue, cwh_wed)
+    local_cwh_thu = math.max(local_cwh_wed, cwh_thu)
+    local_cwh_fri = math.max(local_cwh_thu, cwh_fri)
+    cwl = day_of_week==dayofweek.monday ? local_cwl_mon : day_of_week==dayofweek.tuesday? local_cwl_tue : day_of_week==dayofweek.wednesday ? local_cwl_wed : day_of_week==dayofweek.thursday ? local_cwl_thu : local_cwl_fri
+    cwh = day_of_week==dayofweek.monday ? local_cwh_mon : day_of_week==dayofweek.tuesday? local_cwh_tue : day_of_week==dayofweek.wednesday ? local_cwh_wed : day_of_week==dayofweek.thursday ? local_cwh_thu : local_cwh_fri
+
+    arr_levels_bkdn = array.from(pdl_eth, pdl_rth, dpl_rth[1], opl[1], pwl, cwl)
+    arr_labels_bkdn = array.from('pdl_eth', 'pdl_rth', 'dpl_rth', 'opl', 'pwl', 'cwl')
+    [is_bkdn_a, is_false_bkdn_a, lvl_bkdn_a, lvl_bkh_a, lvl_ll_a] = Analyze2bBull(array.get(arr_levels_bkdn, 0))
+    [is_bkdn_b, is_false_bkdn_b, lvl_bkdn_b, lvl_bkh_b, lvl_ll_b] = Analyze2bBull(array.get(arr_levels_bkdn, 1))
+    [is_bkdn_c, is_false_bkdn_c, lvl_bkdn_c, lvl_bkh_c, lvl_ll_c] = Analyze2bBull(array.get(arr_levels_bkdn, 2))
+    [is_bkdn_d, is_false_bkdn_d, lvl_bkdn_d, lvl_bkh_d, lvl_ll_d] = Analyze2bBull(array.get(arr_levels_bkdn, 3))
+    [is_bkdn_e, is_false_bkdn_e, lvl_bkdn_e, lvl_bkh_e, lvl_ll_e] = Analyze2bBull(array.get(arr_levels_bkdn, 4))
+    [is_bkdn_f, is_false_bkdn_f, lvl_bkdn_f, lvl_bkh_f, lvl_ll_f] = Analyze2bBull(array.get(arr_levels_bkdn, 5))
+    bool[] arr_is_bkdn = array.from(is_bkdn_a, is_bkdn_b, is_bkdn_c, is_bkdn_d, is_bkdn_e, is_bkdn_f)    
+    bool[] arr_is_false_bkdn = array.from(is_false_bkdn_a, is_false_bkdn_b, is_false_bkdn_c, is_false_bkdn_d, is_false_bkdn_e, is_false_bkdn_f)    
+    float[] arr_lvl_bkdn = array.from(lvl_bkdn_a, lvl_bkdn_b, lvl_bkdn_c, lvl_bkdn_d, lvl_bkdn_e, lvl_bkdn_f)    
+    float[] arr_lvl_bkh = array.from(lvl_bkh_a, lvl_bkh_b, lvl_bkh_c, lvl_bkh_d, lvl_bkh_e, lvl_bkh_f)    
+    float[] arr_lvl_ll = array.from(lvl_ll_a, lvl_ll_b, lvl_ll_c, lvl_ll_d, lvl_ll_e, lvl_ll_f)    
+
+    is_allowed_bkdn = timeframe.in_seconds() < 61 ? is_allowed_bkdn_1 : timeframe.in_seconds() < 301 ? is_allowed_bkdn_5 : true
+    is_allowed_false_bkdn = timeframe.in_seconds() < 61 ? is_allowed_false_bkdn_1 : timeframe.in_seconds() < 301 ? is_allowed_false_bkdn_5 : true
+
+    for idx = 0 to array.size(arr_levels_bkdn)-1
+        is_bkdn := is_bkdn or array.get(arr_is_bkdn, idx)
+        is_false_bkdn := is_false_bkdn or array.get(arr_is_false_bkdn, idx)
+
+    is_bkdn := is_bkdn and is_allowed_bkdn
+    //is_false_bkdn := is_false_bkdn and is_allowed_false_bkdn
+    is_bkdn_current_tf := is_bkdn
+    is_false_bkdn_current_tf := is_false_bkdn
+    opl_current_tf := opl
+	dpl_rth_current_tf := dpl_rth
+
+    txt_bkdn_tf_detail = GetLabel(timeframe.period, arr_is_bkdn, arr_labels_bkdn, arr_lvl_bkdn, na, na)
+    txt_false_bkdn_tf_detail = GetLabel(timeframe.period, arr_is_false_bkdn, arr_labels_bkdn, arr_lvl_bkdn, arr_lvl_bkh, arr_lvl_ll)
+
+    txt_bkdn_tf := timeframe.period
+    txt_false_bkdn_tf := timeframe.period
+    tooltip_bkdn := "2b bkdn auto,tf='"+txt_bkdn_tf+"'\n"+txt_bkdn_tf_detail
+    tooltip_false_bkdn := "alert: '2b false bkdn auto', tf="+txt_bkdn_tf+",close: '" + str.tostring(close) + "'\n" + txt_false_bkdn_tf_detail
+
+
+    arr_levels_bkout = array.from(pdh_eth, pdh_rth, dph_rth[1], oph[1], pwh, cwh)
+    arr_labels_bkout = array.from('pdh_eth', 'pdh_rth', 'dph_rth', 'oph', 'pwh', 'cwh')
+    [is_bkout_a, is_false_bkout_a, lvl_bkout_a, lvl_bkl_a, lvl_hh_a] = Analyze2bBear(array.get(arr_levels_bkout, 0))
+    [is_bkout_b, is_false_bkout_b, lvl_bkout_b, lvl_bkl_b, lvl_hh_b] = Analyze2bBear(array.get(arr_levels_bkout, 1))
+    [is_bkout_c, is_false_bkout_c, lvl_bkout_c, lvl_bkl_c, lvl_hh_c] = Analyze2bBear(array.get(arr_levels_bkout, 2))
+    [is_bkout_d, is_false_bkout_d, lvl_bkout_d, lvl_bkl_d, lvl_hh_d] = Analyze2bBear(array.get(arr_levels_bkout, 3))
+    [is_bkout_e, is_false_bkout_e, lvl_bkout_e, lvl_bkl_e, lvl_hh_e] = Analyze2bBear(array.get(arr_levels_bkout, 4))
+    [is_bkout_f, is_false_bkout_f, lvl_bkout_f, lvl_bkl_f, lvl_hh_f] = Analyze2bBear(array.get(arr_levels_bkout, 5))
+    bool[] arr_is_bkout = array.from(is_bkout_a, is_bkout_b, is_bkout_c, is_bkout_d, is_bkout_e, is_bkout_f)    
+    bool[] arr_is_false_bkout = array.from(is_false_bkout_a, is_false_bkout_b, is_false_bkout_c, is_false_bkout_d, is_false_bkout_e, is_false_bkout_f)    
+    float[] arr_lvl_bkout = array.from(lvl_bkout_a, lvl_bkout_b, lvl_bkout_c, lvl_bkout_d, lvl_bkout_e, lvl_bkout_f)    
+    float[] arr_lvl_bkl = array.from(lvl_bkl_a, lvl_bkl_b, lvl_bkl_c, lvl_bkl_d, lvl_bkl_e, lvl_bkl_f)    
+    float[] arr_lvl_hh = array.from(lvl_hh_a, lvl_hh_b, lvl_hh_c, lvl_hh_d, lvl_hh_e, lvl_hh_f)    
+
+    is_allowed_bkout = timeframe.in_seconds() < 61 ? is_allowed_bkout_1 : timeframe.in_seconds() < 301 ? is_allowed_bkout_5 : true
+    is_allowed_false_bkout = timeframe.in_seconds() < 61 ? is_allowed_false_bkout_1 : timeframe.in_seconds() < 301 ? is_allowed_false_bkout_5 : true
+
+    for idx = 0 to array.size(arr_levels_bkout)-1
+        is_bkout := is_bkout or array.get(arr_is_bkout, idx)
+        is_false_bkout := is_false_bkout or array.get(arr_is_false_bkout, idx)
+
+    is_bkout := is_bkout and is_allowed_bkout
+    //is_false_bkout := is_false_bkout and is_allowed_false_bkout
+    is_bkout_current_tf := is_bkout
+    is_false_bkout_current_tf := is_false_bkout
+    oph_current_tf := oph
+	dph_rth_current_tf := dph_rth
+
+    // txt_bkout_tf_detail = GetLabel(arr_is_bkout, arr_labels_bkout, arr_lvl_bkout, na, na)
+    // txt_false_bkout_tf_detail = GetLabel(arr_is_false_bkout, arr_labels_bkout, arr_lvl_bkout, arr_lvl_bkl, arr_lvl_hh)
+    txt_bkout_tf_detail = ""
+    txt_false_bkout_tf_detail = ""
+
+    txt_bkout_tf := timeframe.period
+    txt_false_bkout_tf := timeframe.period
+    tooltip_bkout := "2b bkout auto,tf="+txt_bkout_tf+"\n"+txt_bkout_tf_detail
+    tooltip_false_bkout := "alert: '2b false bkout auto', tf="+txt_bkout_tf+",close: '" + str.tostring(close) + "'\n" + txt_false_bkout_tf_detail
+
+    DrawLevelLine_arr(arr_line_obj_bkdn, arr_label_obj_bkdn, arr_levels_bkdn, arr_labels_bkdn, 12)
+    DrawLevelLine_arr(arr_line_obj_bkout, arr_label_obj_bkout, arr_levels_bkout, arr_labels_bkout, 12)
+
+
+// plot(sma20_1, '', color.blue)
+// is_false_bkdn := true
+bool is_bkdn_alert = timeframe_selection == "chart" ? is_bkdn : (is_bkdn_60_parent and is_bar_closed_60) or (is_bkdn_30_parent and is_bar_closed_30) or (is_bkdn_15_parent and is_bar_closed_15) or (is_bkdn_5_parent and is_bar_closed_5) or (is_bkdn_1_parent and is_bar_closed_1)
+bool is_bkout_alert = timeframe_selection == "chart" ? is_bkout : (is_bkout_60_parent and is_bar_closed_60) or (is_bkout_30_parent and is_bar_closed_30) or (is_bkout_15_parent and is_bar_closed_15) or (is_bkout_5_parent and is_bar_closed_5) or (is_bkout_1_parent and is_bar_closed_1)
+bool is_false_bkdn_alert = timeframe_selection == "chart" ? is_false_bkdn : (is_false_bkdn_60_parent and is_bar_closed_60) or (is_false_bkdn_30_parent and is_bar_closed_30) or (is_false_bkdn_15_parent and is_bar_closed_15) or (is_false_bkdn_5_parent and is_bar_closed_5) or (is_false_bkdn_1_parent and is_bar_closed_1)
+bool is_false_bkout_alert = timeframe_selection == "chart" ? is_false_bkout : (is_false_bkout_60_parent and is_bar_closed_60) or (is_false_bkout_30_parent and is_bar_closed_30) or (is_false_bkout_15_parent and is_bar_closed_15) or (is_false_bkout_5_parent and is_bar_closed_5) or (is_false_bkout_1_parent and is_bar_closed_1)
+if is_bkdn_alert and is_alert_enabled_bkdn
+    alert(tooltip_bkdn, alert.freq_once_per_bar_close)
+if is_false_bkdn_alert and is_alert_enabled_reversal
+    alert(tooltip_false_bkdn, alert.freq_once_per_bar_close)
+if is_bkout_alert and is_alert_enabled_bkout
+    alert(tooltip_bkout, alert.freq_once_per_bar_close)
+if is_false_bkout_alert and is_alert_enabled_reversal
+    alert(tooltip_false_bkout, alert.freq_once_per_bar_close)
+// alertcondition(is_false_bkdn, "false_bkdn", message = "{'type': 'TYPE_TBD', 'ticker': {{ticker}}, 'interval': {{interval}}, 'low': {{plot_3}}, 'false_bkdn_candle_close': {{plot_4}}}")
+// alertcondition(is_bkdn, "bkdn", message = "{'type': 'TYPE_TBD', 'ticker': {{ticker}}, 'interval': {{interval}}, 'low': {{plot_3}}")
+// plotshape(is_bkdn, '', shape.flag, location.belowbar, color.red, size=size.tiny)
+// plotshape(is_false_bkdn, '', shape.flag, location.belowbar, color.green, size=size.tiny)
+color_bk = input.color(color.fuchsia, 'Breakout/Breakdown Candle Color')
+color_false_bk = input.color(color.aqua, 'Reversal Candle Color')
+barcolor(is_false_bkdn_current_tf or is_false_bkout_current_tf ? color_false_bk : is_bkdn_current_tf or is_bkout_current_tf ? color_bk : na, 0, false, na,'break/reversal candle color')
+plot(opl_current_tf, 'opl current tf',InSession("0000-1559", "GMT+1") ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
+plot(oph_current_tf, 'oph current tf',InSession("0000-1559", "GMT+1") ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
+plot(dpl_rth_current_tf, 'dpl_rth current',color.orange, 1, style = plot.style_circles, display = display.none)
+plot(dph_rth_current_tf, 'dph_rth current',color.orange, 1, style = plot.style_circles, display = display.none)
+plot(test_level_to_plot, '', color.aqua, 1, style = plot.style_circles)
+// plot(is_bkdn ? 4110 : 4100)
+// lbl_bkdn = label.new(bar_index, na)
+if is_bkdn
+    lbl = label.new(bar_index, na)
+    label.set_size(lbl, size.small)
+    label.set_yloc( lbl, yloc.belowbar)
+    label.set_style(lbl, label.style_none)
+    label.set_textcolor(lbl, color.gray)
+    label.set_text( lbl, '\n'+txt_bkdn_tf)
+    // label.set_color(lbl_bkdn, color.red)
+    label.set_tooltip(lbl, tooltip_bkdn)
+else if is_false_bkdn
+    lbl = label.new(bar_index, na)
+    label.set_size(lbl, size.small)
+    label.set_yloc( lbl, yloc.belowbar)
+    label.set_style(lbl, label.style_none)
+    label.set_textcolor(lbl, color.green)
+    label.set_text( lbl, '\n'+txt_false_bkdn_tf)
+    // label.set_color(lbl_bkdn, color.green)
+    label.set_tooltip(lbl, tooltip_false_bkdn)
+
+if is_bkout
+    lbl = label.new(bar_index, na)
+    label.set_size(lbl, size.small)
+    label.set_yloc( lbl, yloc.abovebar)
+    label.set_style(lbl, label.style_none)
+    label.set_textcolor(lbl, color.gray)
+    label.set_text( lbl, txt_bkout_tf)
+    // label.set_color(lbl_bkout, color.green)
+    label.set_tooltip(lbl, tooltip_bkout)
+else if is_false_bkout
+    lbl = label.new(bar_index, na)
+    label.set_size(lbl, size.small)
+    label.set_yloc( lbl, yloc.abovebar)
+    label.set_style(lbl, label.style_none)
+    label.set_textcolor(lbl, color.red)
+    label.set_text( lbl, txt_false_bkout_tf)
+    // label.set_color(lbl_bkout, color.red)
+    label.set_tooltip(lbl, tooltip_false_bkout)
+
+    // is_bkout_pdh_eth = is_bkout_pdh_eth_1 or is_bkout_pdh_eth_5 or is_bkout_pdh_eth_15 or is_bkout_pdh_eth_30 or is_bkout_pdh_eth_60
+    // is_bkout_dph_rth = is_bkout_dph_rth_1 or is_bkout_dph_rth_5 or is_bkout_dph_rth_15 or is_bkout_dph_rth_30 or is_bkout_dph_rth_60
+    // is_bkout_pdh_rth = is_bkout_pdh_rth_1 or is_bkout_pdh_rth_5 or is_bkout_pdh_rth_15 or is_bkout_pdh_rth_30 or is_bkout_pdh_rth_60
+    // is_bkout_oph = is_bkout_oph_1 or is_bkout_oph_5 or is_bkout_oph_15 or is_bkout_oph_30 or is_bkout_oph_60
+    // is_bkout_pwh = is_bkout_pwh_1 or is_bkout_pwh_5 or is_bkout_pwh_15 or is_bkout_pwh_30 or is_bkout_pwh_60
+    // is_bkout_cwh = is_bkout_cwh_1 or is_bkout_cwh_5 or is_bkout_cwh_15 or is_bkout_cwh_30 or is_bkout_cwh_60
+
