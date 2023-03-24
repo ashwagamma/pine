@@ -1,6 +1,17 @@
 //@version=5
 indicator(title='2b', shorttitle='2b reversal', overlay=true, max_labels_count = 500)
+//, timeframe=''
 
+tp = hour(time(''), timezone = "America/Los_Angeles")
+tg = hour(time(''), timezone = "GMT")
+tz_gmt = (tp-tg == 17 or tp-tg == -7) ? "GMT+2" : "GMT+1"
+
+// @ToDo
+// Disable pdl_rth/pdl_eth if dpl_rth<pdl_rth/pdl_eth
+
+// SessionLow() returns the lowest price during the specified 
+// session, optionally corrected for the given time zone.
+// Returns 'na' when the session hasn't started or isn't on the chart.
 timeframe_selection = input.string('mtf', 'Timeframe Selection', ['mtf','chart'], "mtf: multi-timeframe analysis, enable alerts on lowest timeframe chart. indicator will analyze all timeframes selected in Multi-TimeFrame Selection below\nchart: If chart option is chosen, then only current chart timeframe will be analyzed.")
 level_selection = input.string('auto', 'Level Selection', ['explicit','auto'], "If set to explicit, please specify explicit level below. If set to lookback, please specify number of lookback bars below to find the lowest. LoD is low of current session, Lo2D is low of previous day and current session, LoW is low of week, Lo2W is min of low of current and past week")
 level_in_explicit = input.float(4070, 'Explicit Level', 0, 100000.0, 0.25, "If set to 0, the indicator will look for false_bkdn from most recent candle that broke a previous candle's low")
@@ -53,9 +64,62 @@ var line lineobj_lvl_bkout_d = line.new(bar_index-10, na, bar_index+10, na, xloc
 var line lineobj_lvl_bkout_e = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
 var line lineobj_lvl_bkout_f = line.new(bar_index-10, na, bar_index+10, na, xloc.bar_index, extend.none, color.white, line.style_dashed, 1)
 
-// SessionLow() returns the lowest price during the specified 
-// session, optionally corrected for the given time zone.
-// Returns 'na' when the session hasn't started or isn't on the chart.
+// Current timeframe lowest lows/highest highs
+// [ll_01, ll_02, ll_03, ll_04, ll_05, ll_06, ll_07, ll_08, ll_09, ll_10] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11, ll_12, ll_13, ll_14, ll_15, ll_16, ll_17, ll_18, ll_19, ll_20] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21, ll_22, ll_23, ll_24, ll_25, ll_26, ll_27, ll_28, ll_29, ll_30] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [hh_01, hh_02, hh_03, hh_04, hh_05, hh_06, hh_07, hh_08, hh_09, hh_10] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [hh_11, hh_12, hh_13, hh_14, hh_15, hh_16, hh_17, hh_18, hh_19, hh_20] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [hh_21, hh_22, hh_23, hh_24, hh_25, hh_26, hh_27, hh_28, hh_29, hh_30] = request.security(syminfo.tickerid, timeframe.period, [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// // ALl timeframe lowest lows/highest highs
+// [ll_01_1, ll_02_1, ll_03_1, ll_04_1, ll_05_1, ll_06_1, ll_07_1, ll_08_1, ll_09_1, ll_10_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_1, ll_12_1, ll_13_1, ll_14_1, ll_15_1, ll_16_1, ll_17_1, ll_18_1, ll_19_1, ll_20_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_1, ll_22_1, ll_23_1, ll_24_1, ll_25_1, ll_26_1, ll_27_1, ll_28_1, ll_29_1, ll_30_1] = request.security(syminfo.tickerid, "1", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_5, ll_02_5, ll_03_5, ll_04_5, ll_05_5, ll_06_5, ll_07_5, ll_08_5, ll_09_5, ll_10_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_5, ll_12_5, ll_13_5, ll_14_5, ll_15_5, ll_16_5, ll_17_5, ll_18_5, ll_19_5, ll_20_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_5, ll_22_5, ll_23_5, ll_24_5, ll_25_5, ll_26_5, ll_27_5, ll_28_5, ll_29_5, ll_30_5] = request.security(syminfo.tickerid, "5", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_15, ll_02_15, ll_03_15, ll_04_15, ll_05_15, ll_06_15, ll_07_15, ll_08_15, ll_09_15, ll_10_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_15, ll_12_15, ll_13_15, ll_14_15, ll_15_15, ll_16_15, ll_17_15, ll_18_15, ll_19_15, ll_20_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// [ll_21_15, ll_22_15, ll_23_15, ll_24_15, ll_25_15, ll_26_15, ll_27_15, ll_28_15, ll_29_15, ll_30_15] = request.security(syminfo.tickerid, "15", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// [ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// // [ll_21_30, ll_22_30, ll_23_30, ll_24_30, ll_25_30, ll_26_30, ll_27_30, ll_28_30, ll_29_30, ll_30_30] = request.security(syminfo.tickerid, "30", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 1), ta.lowest(low, 2), ta.lowest(low, 3), ta.lowest(low, 4), ta.lowest(low, 5), ta.lowest(low, 6), ta.lowest(low, 7), ta.lowest(low, 8), ta.lowest(low, 9), ta.lowest(low, 10)])
+// //[ll_11_60, ll_12_60, ll_13_60, ll_14_60, ll_15_60, ll_16_60, ll_17_60, ll_18_60, ll_19_60, ll_20_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 11), ta.lowest(low, 12), ta.lowest(low, 13), ta.lowest(low, 14), ta.lowest(low, 15), ta.lowest(low, 16), ta.lowest(low, 17), ta.lowest(low, 18), ta.lowest(low, 19), ta.lowest(low, 20)])
+// //[ll_21_60, ll_22_60, ll_23_60, ll_24_60, ll_25_60, ll_26_60, ll_27_60, ll_28_60, ll_29_60, ll_30_60] = request.security(syminfo.tickerid, "60", [ta.lowest(low, 21), ta.lowest(low, 22), ta.lowest(low, 23), ta.lowest(low, 24), ta.lowest(low, 25), ta.lowest(low, 26), ta.lowest(low, 27), ta.lowest(low, 28), ta.lowest(low, 29), ta.lowest(low, 30)])
+// [hh_01_1, hh_02_1, hh_03_1, hh_04_1, hh_05_1, hh_06_1, hh_07_1, hh_08_1, hh_09_1, hh_10_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_1, hh_12_1, hh_13_1, hh_14_1, hh_15_1, hh_16_1, hh_17_1, hh_18_1, hh_19_1, hh_20_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_1, hh_22_1, hh_23_1, hh_24_1, hh_25_1, hh_26_1, hh_27_1, hh_28_1, hh_29_1, hh_30_1] = request.security(syminfo.tickerid, "1", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_5, hh_02_5, hh_03_5, hh_04_5, hh_05_5, hh_06_5, hh_07_5, hh_08_5, hh_09_5, hh_10_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_5, hh_12_5, hh_13_5, hh_14_5, hh_15_5, hh_16_5, hh_17_5, hh_18_5, hh_19_5, hh_20_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_5, hh_22_5, hh_23_5, hh_24_5, hh_25_5, hh_26_5, hh_27_5, hh_28_5, hh_29_5, hh_30_5] = request.security(syminfo.tickerid, "5", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_15, hh_02_15, hh_03_15, hh_04_15, hh_05_15, hh_06_15, hh_07_15, hh_08_15, hh_09_15, hh_10_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_15, hh_12_15, hh_13_15, hh_14_15, hh_15_15, hh_16_15, hh_17_15, hh_18_15, hh_19_15, hh_20_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// [hh_21_15, hh_22_15, hh_23_15, hh_24_15, hh_25_15, hh_26_15, hh_27_15, hh_28_15, hh_29_15, hh_30_15] = request.security(syminfo.tickerid, "15", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// [hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// //[hh_21_30, hh_22_30, hh_23_30, hh_24_30, hh_25_30, hh_26_30, hh_27_30, hh_28_30, hh_29_30, hh_30_30] = request.security(syminfo.tickerid, "30", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+// [hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 1), ta.highest(high, 2), ta.highest(high, 3), ta.highest(high, 4), ta.highest(high, 5), ta.highest(high, 6), ta.highest(high, 7), ta.highest(high, 8), ta.highest(high, 9), ta.highest(high, 10)])
+// //[hh_11_60, hh_12_60, hh_13_60, hh_14_60, hh_15_60, hh_16_60, hh_17_60, hh_18_60, hh_19_60, hh_20_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 11), ta.highest(high, 12), ta.highest(high, 13), ta.highest(high, 14), ta.highest(high, 15), ta.highest(high, 16), ta.highest(high, 17), ta.highest(high, 18), ta.highest(high, 19), ta.highest(high, 20)])
+// //[hh_21_60, hh_22_60, hh_23_60, hh_24_60, hh_25_60, hh_26_60, hh_27_60, hh_28_60, hh_29_60, hh_30_60] = request.security(syminfo.tickerid, "60", [ta.highest(high, 21), ta.highest(high, 22), ta.highest(high, 23), ta.highest(high, 24), ta.highest(high, 25), ta.highest(high, 26), ta.highest(high, 27), ta.highest(high, 28), ta.highest(high, 29), ta.highest(high, 30)])
+
+// arr_ll = array.from(ll_01, ll_02, ll_03, ll_04, ll_05, ll_06, ll_07, ll_08, ll_09, ll_10, ll_11, ll_12, ll_13, ll_14, ll_15, ll_16, ll_17, ll_18, ll_19, ll_20, ll_21, ll_22, ll_23, ll_24, ll_25, ll_26, ll_27, ll_28, ll_29, ll_30)
+// arr_hh = array.from(hh_01, hh_02, hh_03, hh_04, hh_05, hh_06, hh_07, hh_08, hh_09, hh_10, hh_11, hh_12, hh_13, hh_14, hh_15, hh_16, hh_17, hh_18, hh_19, hh_20, hh_21, hh_22, hh_23, hh_24, hh_25, hh_26, hh_27, hh_28, hh_29, hh_30)
+// arr_ll_1 = array.from(ll_01_1, ll_02_1, ll_03_1, ll_04_1, ll_05_1, ll_06_1, ll_07_1, ll_08_1, ll_09_1, ll_10_1, ll_11_1, ll_12_1, ll_13_1, ll_14_1, ll_15_1, ll_16_1, ll_17_1, ll_18_1, ll_19_1, ll_20_1, ll_21_1, ll_22_1, ll_23_1, ll_24_1, ll_25_1, ll_26_1, ll_27_1, ll_28_1, ll_29_1, ll_30_1)
+// arr_ll_5 = array.from(ll_01_5, ll_02_5, ll_03_5, ll_04_5, ll_05_5, ll_06_5, ll_07_5, ll_08_5, ll_09_5, ll_10_5, ll_11_5, ll_12_5, ll_13_5, ll_14_5, ll_15_5, ll_16_5, ll_17_5, ll_18_5, ll_19_5, ll_20_5, ll_21_5, ll_22_5, ll_23_5, ll_24_5, ll_25_5, ll_26_5, ll_27_5, ll_28_5, ll_29_5, ll_30_5)
+// arr_ll_15 = array.from(ll_01_15, ll_02_15, ll_03_15, ll_04_15, ll_05_15, ll_06_15, ll_07_15, ll_08_15, ll_09_15, ll_10_15, ll_11_15, ll_12_15, ll_13_15, ll_14_15, ll_15_15, ll_16_15, ll_17_15, ll_18_15, ll_19_15, ll_20_15, ll_21_15, ll_22_15, ll_23_15, ll_24_15, ll_25_15, ll_26_15, ll_27_15, ll_28_15, ll_29_15, ll_30_15)
+// //arr_ll_30 = array.from(ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30, ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30, ll_21_30, ll_22_30, ll_23_30, ll_24_30, ll_25_30, ll_26_30, ll_27_30, ll_28_30, ll_29_30, ll_30_30)
+// //arr_ll_60 = array.from(ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60, ll_11_60, ll_12_60, ll_13_60, ll_14_60, ll_15_60, ll_16_60, ll_17_60, ll_18_60, ll_19_60, ll_20_60, ll_21_60, ll_22_60, ll_23_60, ll_24_60, ll_25_60, ll_26_60, ll_27_60, ll_28_60, ll_29_60, ll_30_60)
+// arr_ll_30 = array.from(ll_01_30, ll_02_30, ll_03_30, ll_04_30, ll_05_30, ll_06_30, ll_07_30, ll_08_30, ll_09_30, ll_10_30, ll_11_30, ll_12_30, ll_13_30, ll_14_30, ll_15_30, ll_16_30, ll_17_30, ll_18_30, ll_19_30, ll_20_30)
+// arr_ll_60 = array.from(ll_01_60, ll_02_60, ll_03_60, ll_04_60, ll_05_60, ll_06_60, ll_07_60, ll_08_60, ll_09_60, ll_10_60)
+// arr_hh_1 = array.from(hh_01_1, hh_02_1, hh_03_1, hh_04_1, hh_05_1, hh_06_1, hh_07_1, hh_08_1, hh_09_1, hh_10_1, hh_11_1, hh_12_1, hh_13_1, hh_14_1, hh_15_1, hh_16_1, hh_17_1, hh_18_1, hh_19_1, hh_20_1, hh_21_1, hh_22_1, hh_23_1, hh_24_1, hh_25_1, hh_26_1, hh_27_1, hh_28_1, hh_29_1, hh_30_1)
+// arr_hh_5 = array.from(hh_01_5, hh_02_5, hh_03_5, hh_04_5, hh_05_5, hh_06_5, hh_07_5, hh_08_5, hh_09_5, hh_10_5, hh_11_5, hh_12_5, hh_13_5, hh_14_5, hh_15_5, hh_16_5, hh_17_5, hh_18_5, hh_19_5, hh_20_5, hh_21_5, hh_22_5, hh_23_5, hh_24_5, hh_25_5, hh_26_5, hh_27_5, hh_28_5, hh_29_5, hh_30_5)
+// arr_hh_15 = array.from(hh_01_15, hh_02_15, hh_03_15, hh_04_15, hh_05_15, hh_06_15, hh_07_15, hh_08_15, hh_09_15, hh_10_15, hh_11_15, hh_12_15, hh_13_15, hh_14_15, hh_15_15, hh_16_15, hh_17_15, hh_18_15, hh_19_15, hh_20_15, hh_21_15, hh_22_15, hh_23_15, hh_24_15, hh_25_15, hh_26_15, hh_27_15, hh_28_15, hh_29_15, hh_30_15)
+// //arr_hh_30 = array.from(hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30, hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30, hh_21_30, hh_22_30, hh_23_30, hh_24_30, hh_25_30, hh_26_30, hh_27_30, hh_28_30, hh_29_30, hh_30_30)
+// //arr_hh_60 = array.from(hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60, hh_11_60, hh_12_60, hh_13_60, hh_14_60, hh_15_60, hh_16_60, hh_17_60, hh_18_60, hh_19_60, hh_20_60, hh_21_60, hh_22_60, hh_23_60, hh_24_60, hh_25_60, hh_26_60, hh_27_60, hh_28_60, hh_29_60, hh_30_60)
+// arr_hh_30 = array.from(hh_01_30, hh_02_30, hh_03_30, hh_04_30, hh_05_30, hh_06_30, hh_07_30, hh_08_30, hh_09_30, hh_10_30, hh_11_30, hh_12_30, hh_13_30, hh_14_30, hh_15_30, hh_16_30, hh_17_30, hh_18_30, hh_19_30, hh_20_30)
+// arr_hh_60 = array.from(hh_01_60, hh_02_60, hh_03_60, hh_04_60, hh_05_60, hh_06_60, hh_07_60, hh_08_60, hh_09_60, hh_10_60)
+
 SessionLow(sessionTime, sessionTimeZone=syminfo.timezone, price, is_strict=false) =>
     insideSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
     var float sessionLowPrice = na
@@ -275,9 +339,9 @@ GetSessionPivotHigh(sessionTime, sessionTimeZone=syminfo.timezone, high_in, num_
     not insideSession[num_bars] ? na : pivot_high
 
 GetStrTimeAdded(start_time_24hr, start_time_min, num_min_to_be_added) =>
-    t = timestamp("GMT+1",2023,1,1,start_time_24hr,start_time_min)
+    t = timestamp(tz_gmt,2023,1,1,start_time_24hr,start_time_min)
     t := t+num_min_to_be_added*60000
-    str.format_time(t, "HHmm", "GMT+1")
+    str.format_time(t, "HHmm", tz_gmt)
 
 GetEndTimeForPivot(start_time_24hr, start_time_min, numbar_in_currrent_chart_tf, target_tf_in_min) =>
     retval = GetStrTimeAdded(15,30,numbar_in_currrent_chart_tf*timeframe.in_seconds()/60+(target_tf_in_min/timeframe.in_seconds()/60-1))
@@ -289,32 +353,32 @@ numbar_pivot_15 = timeframe.in_seconds() < 901 ? 2 * 900/timeframe.in_seconds() 
 numbar_pivot_30 = timeframe.in_seconds() < 1801 ? 2 * 1800/timeframe.in_seconds() : 1000
 numbar_pivot_60 = timeframe.in_seconds() < 3601 ? 2 * 3600/timeframe.in_seconds() : 1000
 
-pivot_low_1 = GetSessionPivotLow("0000-2200", "GMT+1", low_1, numbar_pivot_1)
-pivot_low_1_rth = GetSessionPivotLow("1530-2200", "GMT+1", low_1, numbar_pivot_1)
-pivot_low_5 = GetSessionPivotLow("0004-2200", "GMT+1", low_5, numbar_pivot_5_eth)
-pivot_low_5_rth = GetSessionPivotLow("1534-2200", "GMT+1", low_5, numbar_pivot_5_rth)
-pivot_low_15 = GetSessionPivotLow("0014-2200", "GMT+1", low_15, numbar_pivot_15)
-pivot_low_15_rth = GetSessionPivotLow("1544-2200", "GMT+1", low_15, numbar_pivot_15)
-pivot_low_30 = GetSessionPivotLow("0029-2200", "GMT+1", low_30, numbar_pivot_30)
-pivot_low_30_rth = GetSessionPivotLow("1559-2200", "GMT+1", low_30, numbar_pivot_30)
-pivot_low_60 = GetSessionPivotLow("0059-2200", "GMT+1", low_60, numbar_pivot_60)
-pivot_low_60_rth = GetSessionPivotLow("1629-2200", "GMT+1", low_60, numbar_pivot_60)
-pivot_high_1 = GetSessionPivotHigh("0000-2200", "GMT+1", high_1, numbar_pivot_1)
-pivot_high_1_rth = GetSessionPivotHigh("1530-2200", "GMT+1", high_1, numbar_pivot_1)
-pivot_high_5 = GetSessionPivotHigh("0004-2200", "GMT+1", high_5, numbar_pivot_5_eth)
-pivot_high_5_rth = GetSessionPivotHigh("1534-2200", "GMT+1", high_5, numbar_pivot_5_rth)
-pivot_high_15 = GetSessionPivotHigh("0014-2200", "GMT+1", high_15, numbar_pivot_15)
-pivot_high_15_rth = GetSessionPivotHigh("1544-2200", "GMT+1", high_15, numbar_pivot_15)
-pivot_high_30 = GetSessionPivotHigh("0029-2200", "GMT+1", high_30, numbar_pivot_30)
-pivot_high_30_rth = GetSessionPivotHigh("1559-2200", "GMT+1", high_30, numbar_pivot_30)
-pivot_high_60 = GetSessionPivotHigh("0059-2200", "GMT+1", high_60, numbar_pivot_60)
-pivot_high_60_rth = GetSessionPivotHigh("1629-2200", "GMT+1", high_60, numbar_pivot_60)
+pivot_low_1 = GetSessionPivotLow("0000-2200", tz_gmt, low_1, numbar_pivot_1)
+pivot_low_1_rth = GetSessionPivotLow("0630-1300", "America/Los_Angeles", low_1, numbar_pivot_1)
+pivot_low_5 = GetSessionPivotLow("0004-2200", tz_gmt, low_5, numbar_pivot_5_eth)
+pivot_low_5_rth = GetSessionPivotLow("0634-1300", "America/Los_Angeles", low_5, numbar_pivot_5_rth)
+pivot_low_15 = GetSessionPivotLow("0014-2200", tz_gmt, low_15, numbar_pivot_15)
+pivot_low_15_rth = GetSessionPivotLow("0644-1300", "America/Los_Angeles", low_15, numbar_pivot_15)
+pivot_low_30 = GetSessionPivotLow("0029-2200", tz_gmt, low_30, numbar_pivot_30)
+pivot_low_30_rth = GetSessionPivotLow("0659-1300", "America/Los_Angeles", low_30, numbar_pivot_30)
+pivot_low_60 = GetSessionPivotLow("0059-2200", tz_gmt, low_60, numbar_pivot_60)
+pivot_low_60_rth = GetSessionPivotLow("0729-1300", "America/Los_Angeles", low_60, numbar_pivot_60)
+pivot_high_1 = GetSessionPivotHigh("0000-2200", tz_gmt, high_1, numbar_pivot_1)
+pivot_high_1_rth = GetSessionPivotHigh("0630-1300", "America/Los_Angeles", high_1, numbar_pivot_1)
+pivot_high_5 = GetSessionPivotHigh("0004-2200", tz_gmt, high_5, numbar_pivot_5_eth)
+pivot_high_5_rth = GetSessionPivotHigh("0634-1300", "America/Los_Angeles", high_5, numbar_pivot_5_rth)
+pivot_high_15 = GetSessionPivotHigh("0014-2200", tz_gmt, high_15, numbar_pivot_15)
+pivot_high_15_rth = GetSessionPivotHigh("0644-1300", "America/Los_Angeles", high_15, numbar_pivot_15)
+pivot_high_30 = GetSessionPivotHigh("0029-2200", tz_gmt, high_30, numbar_pivot_30)
+pivot_high_30_rth = GetSessionPivotHigh("0659-1300", "America/Los_Angeles", high_30, numbar_pivot_30)
+pivot_high_60 = GetSessionPivotHigh("0059-2200", tz_gmt, high_60, numbar_pivot_60)
+pivot_high_60_rth = GetSessionPivotHigh("0729-1300", "America/Los_Angeles", high_60, numbar_pivot_60)
 numbar_pivot = timeframe.in_seconds() < 61 ? 5 : timeframe.in_seconds() < 301 ? 4 : 2
 numbar_pivot_rth = timeframe.in_seconds() < 61 ? 5 : timeframe.in_seconds() < 301 ? 2 : 2
-pivot_low = GetSessionPivotLow("0000-2200", "GMT+1", low, numbar_pivot)
-pivot_low_rth = GetSessionPivotLow("1530-2200", "GMT+1", low, numbar_pivot_rth)
-pivot_high = GetSessionPivotHigh("0000-2200", "GMT+1", high, numbar_pivot)
-pivot_high_rth = GetSessionPivotHigh("1530-2200", "GMT+1", high, numbar_pivot_rth)
+pivot_low = GetSessionPivotLow("0000-2200", tz_gmt, low, numbar_pivot)
+pivot_low_rth = GetSessionPivotLow("0630-1300", "America/Los_Angeles", low, numbar_pivot_rth)
+pivot_high = GetSessionPivotHigh("0000-2200", tz_gmt, high, numbar_pivot)
+pivot_high_rth = GetSessionPivotHigh("0630-1300", "America/Los_Angeles", high, numbar_pivot_rth)
 [pwl,pwh] = request.security(syminfo.tickerid,"W", [low[1],high[1]], lookahead = barmerge.lookahead_on)
 [pdl_eth, pdl_eth_m1, pdl_eth_m2, pdl_eth_m3, pdl_eth_m4, pdh_eth, pdh_eth_m1, pdh_eth_m2, pdh_eth_m3, pdh_eth_m4] = request.security(syminfo.tickerid,"D", [low[1], low[2], low[3], low[4], low[5], high[1], high[2], high[3], high[4], high[5]], lookahead=barmerge.lookahead_on)
 cwl_tue = pdl_eth
@@ -325,32 +389,38 @@ cwh_tue = pdh_eth
 cwh_wed = math.max(pdh_eth, pdh_eth_m1)
 cwh_thu = math.max(pdh_eth, pdh_eth_m1, pdh_eth_m2)
 cwh_fri = math.max(pdh_eth, pdh_eth_m1, pdh_eth_m2, pdh_eth_m3)
-dpl_eth = SessionLow("0000-2200", "GMT+1", low) // Pacific time: 6.30am to 1pm
-dph_eth = SessionHigh("0000-2200", "GMT+1", high) // Pacific time: 6.30am to 1pm
-pdl_rth = pdl_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
-pdh_rth = pdh_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
+dpl_eth = SessionLow("0000-2200", tz_gmt, low) // Pacific time: 6.30am to 1pm
+dph_eth = SessionHigh("0000-2200", tz_gmt, high) // Pacific time: 6.30am to 1pm
+[hlc3_spx] = request.security("SPX", timeframe.period, [hlc3])
+[hlc3_cur] = request.security(syminfo.tickerid, timeframe.period, [hlc3])
+[pdl_rth_spx] = request.security("SPX", "D", [low[1]])
+[pdh_rth_spx] = request.security("SPX", "D", [high[1]])
+pdl_rth = InSession("0630-1300", "America/Los_Angeles") ? pdl_rth_spx+hlc3_cur-hlc3_spx : na
+pdh_rth = InSession("0630-1300", "America/Los_Angeles") ? pdh_rth_spx+hlc3_cur-hlc3_spx : na
+//pdl_rth = pdl_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
+//pdh_rth = pdh_eth // @ToDo-Need to figure out how to get oply regular hours for previous day
 
 
-is_allowed_bkdn_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1 // Pacific time: 5.30am to 9am
-is_allowed_false_bkdn_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
-is_allowed_bkout_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1// Pacific time: 5.30am to 9am
-is_allowed_false_bkout_1 = InSession("1430-2200", "GMT+1") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
-is_allowed_bkdn_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
-is_allowed_false_bkdn_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
-is_allowed_bkout_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
-is_allowed_false_bkout_5 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
-is_allowed_bkdn_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
-is_allowed_false_bkdn_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
-is_allowed_bkout_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
-is_allowed_false_bkout_15 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
-is_allowed_bkdn_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
-is_allowed_false_bkdn_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
-is_allowed_bkout_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
-is_allowed_false_bkout_30 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_30
-is_allowed_bkdn_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
-is_allowed_false_bkdn_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
-is_allowed_bkout_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
-is_allowed_false_bkout_60 = InSession("0000-2200", "GMT+1") and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_bkdn_1 = InSession("0400-1300", "America/Los_Angeles") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1 // Pacific time: 5.30am to 9am
+is_allowed_false_bkdn_1 = InSession("0400-1300", "America/Los_Angeles") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
+is_allowed_bkout_1 = InSession("0400-1300", "America/Los_Angeles") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1// Pacific time: 5.30am to 9am
+is_allowed_false_bkout_1 = InSession("0400-1300", "America/Los_Angeles") and timeframe.in_seconds() < 61 and is_options_allowed_mtf_1
+is_allowed_bkdn_5 = InSession("0000-2200", tz_gmt) and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_false_bkdn_5 = InSession("0000-2200", tz_gmt) and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_bkout_5 = InSession("0000-2200", tz_gmt) and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_false_bkout_5 = InSession("0000-2200", tz_gmt) and timeframe.in_seconds() < 301 and is_options_allowed_mtf_5
+is_allowed_bkdn_15 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_false_bkdn_15 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_bkout_15 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_false_bkout_15 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 901 and is_options_allowed_mtf_15
+is_allowed_bkdn_30 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_false_bkdn_30 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_bkout_30 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 1801 and is_options_allowed_mtf_30
+is_allowed_false_bkout_30 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_30
+is_allowed_bkdn_60 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_false_bkdn_60 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_bkout_60 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
+is_allowed_false_bkout_60 = InSession("0000-1430", tz_gmt) and timeframe.in_seconds() < 3601 and is_options_allowed_mtf_60
 
 bool is_bkdn_1_parent = false
 bool is_bkdn_5_parent = false
@@ -394,7 +464,7 @@ float dpl_rth_current_tf = na
 float oph_current_tf = na
 float dph_rth_current_tf = na
 float dummy_float = na
-day_of_week = dayofweek(time, "GMT+1")
+day_of_week = dayofweek(time, tz_gmt)
 arr_label_obj_bkdn = array.from(labelobj_lvl_bkdn_a, labelobj_lvl_bkdn_b, labelobj_lvl_bkdn_c, labelobj_lvl_bkdn_d, labelobj_lvl_bkdn_e, labelobj_lvl_bkdn_f)
 arr_label_obj_bkout = array.from(labelobj_lvl_bkout_a, labelobj_lvl_bkout_b, labelobj_lvl_bkout_c, labelobj_lvl_bkout_d, labelobj_lvl_bkout_e, labelobj_lvl_bkout_f)
 arr_line_obj_bkdn = array.from(lineobj_lvl_bkdn_a, lineobj_lvl_bkdn_b, lineobj_lvl_bkdn_c, lineobj_lvl_bkdn_d, lineobj_lvl_bkdn_e, lineobj_lvl_bkdn_f)
@@ -483,27 +553,27 @@ if is_explicit
 else if timeframe_selection == 'mtf'
     // Get the session low
     // Pacific time: 3pm prev day to 1pm next day, @ToDo-need to figure out how to set this to 2300 without bars failing
-    dpl_rth_1 = SessionLow("1530-2200", "GMT+1", pivot_low_1_rth, true) // Pacific time: 6.30am to 1pm
-    dpl_rth_5 = SessionLow("1530-2200", "GMT+1", pivot_low_5_rth, true) // Pacific time: 6.30am to 1pm
-    dpl_rth_15 = SessionLow("1530-2200", "GMT+1", pivot_low_15_rth, true) // Pacific time: 6.30am to 1pm
-    dpl_rth_30 = SessionLow("1530-2200", "GMT+1", pivot_low_30_rth, true) // Pacific time: 6.30am to 1pm
-    dpl_rth_60 = SessionLow("1530-2200", "GMT+1", pivot_low_60_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth_1 = SessionHigh("1530-2200", "GMT+1", pivot_high_1_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth_5 = SessionHigh("1530-2200", "GMT+1", pivot_high_5_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth_15 = SessionHigh("1530-2200", "GMT+1", pivot_high_15_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth_30 = SessionHigh("1530-2200", "GMT+1", pivot_high_30_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth_60 = SessionHigh("1530-2200", "GMT+1", pivot_high_60_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth_1 = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_1_rth, true)
+    dpl_rth_5 = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_5_rth, true)
+    dpl_rth_15 = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_15_rth, true)
+    dpl_rth_30 = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_30_rth, true)
+    dpl_rth_60 = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_60_rth, true)
+    dph_rth_1 = SessionHigh("0630-1300", "America/Los_Angeles", pivot_high_1_rth, true)
+    dph_rth_5 = SessionHigh("0630-1300", "America/Los_Angeles", pivot_high_5_rth, true)
+    dph_rth_15 = SessionHigh("0630-1300", "America/Los_Angeles", pivot_high_15_rth, true)
+    dph_rth_30 = SessionHigh("0630-1300", "America/Los_Angeles", pivot_high_30_rth, true)
+    dph_rth_60 = SessionHigh("0630-1300", "America/Los_Angeles", pivot_high_60_rth, true)
 
-    opl_1  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), "GMT+1", pivot_low_1)
-    opl_5  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), "GMT+1", pivot_low_5)
-    opl_15 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), "GMT+1", pivot_low_15)
-    opl_30 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), "GMT+1", pivot_low_30)
-    opl_60 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), "GMT+1", pivot_low_60)
-    oph_1  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), "GMT+1", pivot_high_1)
-    oph_5  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), "GMT+1", pivot_high_5)
-    oph_15 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), "GMT+1", pivot_high_15)
-    oph_30 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), "GMT+1", pivot_high_30)
-    oph_60 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), "GMT+1", pivot_high_60)
+    opl_1  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), tz_gmt, pivot_low_1)
+    opl_5  = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), tz_gmt, pivot_low_5)
+    opl_15 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), tz_gmt, pivot_low_15)
+    opl_30 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), tz_gmt, pivot_low_30)
+    opl_60 = SessionLow ("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), tz_gmt, pivot_low_60)
+    oph_1  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_1, 1), tz_gmt, pivot_high_1)
+    oph_5  = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_5_eth, 5), tz_gmt, pivot_high_5)
+    oph_15 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_15, 15), tz_gmt, pivot_high_15)
+    oph_30 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_30, 30), tz_gmt, pivot_high_30)
+    oph_60 = SessionHigh("0000-"+GetEndTimeForPivot(15,30,numbar_pivot_60, 60), tz_gmt, pivot_high_60)
 
     local_cwl_mon = dpl_eth
     local_cwl_tue = math.min(local_cwl_mon, cwl_tue)
@@ -808,11 +878,11 @@ else if timeframe_selection == 'mtf'
 else if timeframe_selection == "chart"
     // Get the session low
     // Pacific time: 3pm prev day to 1pm next day, @ToDo-need to figure out how to set this to 2300 without bars failing
-    dpl_rth = SessionLow("1530-2200", "GMT+1", pivot_low_rth, true) // Pacific time: 6.30am to 1pm
-    dph_rth = SessionHigh("1530-2200", "GMT+1", pivot_high_rth, true) // Pacific time: 6.30am to 1pm
+    dpl_rth = SessionLow("0630-1300", "America/Los_Angeles", pivot_low_rth, true) // Pacific time: 6.30am to 1pm
+    dph_rth = SessionHigh("0630-2200", "America/Los_Angeles", pivot_high_rth, true) // Pacific time: 6.30am to 1pm
     //test_level_to_plot := dpl_rth
-    opl = SessionLow("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), "GMT+1", pivot_low) // Pacific time: 3pm prev day to 6.30 next day, overnight session, +5mins added since pivot low has 5 lookback bars
-    oph = SessionHigh("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), "GMT+1", pivot_high) // Pacific time: 3pm prev day to 6.30 next day, overnight session
+    opl = SessionLow("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), tz_gmt, pivot_low) // Pacific time: 3pm prev day to 6.30 next day, overnight session, +5mins added since pivot low has 5 lookback bars
+    oph = SessionHigh("0000-"+GetStrTimeAdded(15,30,timeframe.in_seconds()/60), tz_gmt, pivot_high) // Pacific time: 3pm prev day to 6.30 next day, overnight session
 
     local_cwl_mon = dpl_eth
     local_cwl_tue = math.min(local_cwl_mon, cwl_tue)
@@ -927,8 +997,8 @@ if is_false_bkout_alert and is_alert_enabled_reversal
 color_bk = input.color(color.fuchsia, 'Breakout/Breakdown Candle Color')
 color_false_bk = input.color(color.aqua, 'Reversal Candle Color')
 barcolor(is_false_bkdn_current_tf or is_false_bkout_current_tf ? color_false_bk : is_bkdn_current_tf or is_bkout_current_tf ? color_bk : na, 0, false, na,'break/reversal candle color')
-plot(opl_current_tf, 'opl current tf',InSession("0000-1559", "GMT+1") ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
-plot(oph_current_tf, 'oph current tf',InSession("0000-1559", "GMT+1") ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
+plot(opl_current_tf, 'opl current tf',InSession("0000-1559", tz_gmt) ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
+plot(oph_current_tf, 'oph current tf',InSession("0000-1559", tz_gmt) ? color.yellow : color.gray, 1, style = plot.style_circles, display = display.none)
 plot(dpl_rth_current_tf, 'dpl_rth current',color.orange, 1, style = plot.style_circles, display = display.none)
 plot(dph_rth_current_tf, 'dph_rth current',color.orange, 1, style = plot.style_circles, display = display.none)
 plot(test_level_to_plot, '', color.aqua, 1, style = plot.style_circles)
