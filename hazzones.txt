@@ -1,0 +1,180 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ashwagamma
+
+//@version=5
+indicator("HAZZONES", overlay = true, max_boxes_count = 200)
+var count_consecutive_bullish = 1
+var count_consecutive_bearish = 1
+
+var is_bullish_rally = false
+var is_bearish_rally = false
+float support_zone_low = 0
+float support_zone_high = 0
+float support_zone_close = 0
+float support_zone_open = 0
+float resistance_zone_low = 0
+float resistance_zone_high = 0
+float resistance_zone_close = 0
+float resistance_zone_open = 0
+
+maxNumOfBoxes = input.int(defval=99, title='Maximum # of Zone Displayed', minval=1, maxval=100, tooltip='Minimum = 1, Maximum = 100')
+numBullBearHA = input.int(defval = 5, title='Number of bull/bear HA candles', minval=1, maxval=10)
+tf = input.timeframe("", "Timeframe")
+supBoxColor = input.color(defval=color.new(color.green, 80), title='Support Zone Color', group="Support Zone Style")
+supBoxBorderColor = input.color(defval=color.new(color.green, 70), title='Support Zone Border Color', group="Support Zone Style")
+overlapSupBoxColor = input.color(defval=color.new(color.green, 90), title='Overlapping Support Zone Color', group="Support Zone Style")
+overlapSupBoxBorderColor = input.color(defval=color.new(color.green, 85), title='Overlapping Support Zone Border Color', group="Support Zone Style")
+resBoxColor = input.color(defval=color.new(color.red, 80), title='Resistance Zone Color', group="Resistance Zone Style")
+resBoxBorderColor = input.color(defval=color.new(color.red, 70), title='Resistance Zone Border Color', group="Resistance Zone Style")
+overlapResBoxColor = input.color(defval=color.new(color.red, 90), title='Overlapping Resistance Zone Color', group="Resistance Zone Style")
+overlapResBoxBorderColor = input.color(defval=color.new(color.red, 85), title='Overlapping Resistance Zone Border Color', group="Resistance Zone Style")
+showMitigatedZones = input.bool(defval=true, title='Show mitigated zones?', group="Mitigated Zone Style")
+mitResBoxColor = input.color(defval=color.new(color.gray, 85), title='Mitigated Resistance Zone Color', group="Mitigated Zone Style", tooltip='Set Transparency to 0 to make mitigated Boxes disappear')
+mitResBoxBorderColor = input.color(defval=color.new(color.red, 70), title='Mitigated Resistance Zone Border Color', group="Mitigated Zone Style", tooltip='Set Transparency to 0 to make mitigated Boxes disappear')
+mitSupBoxColor = input.color(defval=color.new(color.gray, 85), title='Mitigated Support Zone Color', group="Mitigated Zone Style", tooltip='Set Transparency to 0 to make mitigated Boxes disappear')
+mitSupBoxBorderColor = input.color(defval=color.new(color.green, 70), title='Mitigated Support Zone Border Color', group="Mitigated Zone Style", tooltip='Set Transparency to 0 to make mitigated Boxes disappear')
+
+var box[] _supports = array.new_box()
+var bool[] _isSupMitigated = array.new_bool()
+var box[] _resistances = array.new_box()
+var bool[] _isResMitigated = array.new_bool()
+
+[o, h, l, c] = request.security(ticker.heikinashi(syminfo.tickerid), tf, [open, high, low, close])
+is_bullish = (c > o) and (h > c) and (l - o  > -1*(h-l)/5)
+is_bearish = (c < o) and (l < c) and (o - h  > -1*(h-l)/5)
+
+is_red_candle = c < o
+is_green_candle = c >= o
+count_num_since_green_candle = ta.barssince(is_green_candle)
+count_num_since_red_candle = ta.barssince(is_red_candle)
+
+
+is_bullish_rally := is_bullish_rally[1] and is_green_candle? true: is_bullish
+is_bearish_rally := is_bearish_rally[1] and is_red_candle? true: is_bearish
+count_consecutive_bullish := is_bullish_rally ? count_consecutive_bullish + 1: 0
+count_consecutive_bearish := is_bearish_rally ? count_consecutive_bearish + 1: 0
+
+support_zone_low := l[count_num_since_red_candle]
+support_zone_high := h[count_num_since_red_candle]
+support_zone_close := c[count_num_since_red_candle]
+support_zone_open := o[count_num_since_red_candle]
+if count_consecutive_bullish == numBullBearHA
+    box supbox = na
+    supbox := box.new(bar_index-count_num_since_red_candle, support_zone_high[1], bar_index+1, support_zone_low[1], xloc = xloc.bar_index, border_color = supBoxBorderColor, bgcolor=supBoxColor)
+    if array.size(_supports) > maxNumOfBoxes
+        box.delete(array.shift(_supports))
+    array.push(_supports, supbox)
+    array.push(_isSupMitigated, false)
+
+
+resistance_zone_low := l[count_num_since_green_candle]
+resistance_zone_high := h[count_num_since_green_candle]
+resistance_zone_close := c[count_num_since_green_candle]
+resistance_zone_open := o[count_num_since_green_candle]
+if count_consecutive_bearish == numBullBearHA
+    box resbox = na
+    resbox := box.new(bar_index-count_num_since_green_candle, resistance_zone_high[1], bar_index+1, resistance_zone_low[1], xloc = xloc.bar_index, border_color = resBoxBorderColor, bgcolor=resBoxColor)
+    if array.size(_resistances) > maxNumOfBoxes
+        box.delete(array.shift(_resistances))
+    array.push(_resistances, resbox)
+    array.push(_isResMitigated, false)
+
+if array.size(_supports) > 0 and barstate.isconfirmed
+    for i = array.size(_supports) - 1 to 0 by 1
+        _box = array.get(_supports, i)
+        _boxLow = box.get_bottom(_box)
+        _boxHigh = box.get_top(_box)
+        _boxRight = box.get_right(_box)
+        if c >= _boxLow and bar_index == _boxRight
+            box.set_right(_box, bar_index + 1)
+        else 
+            if c < _boxLow and bar_index == _boxRight
+                if showMitigatedZones
+                    box.set_bgcolor(_box, mitSupBoxColor)
+                    box.set_border_color(_box, mitSupBoxBorderColor)
+                    array.set(_isSupMitigated, i, true)
+                else
+                    array.remove(_supports, i)
+                    array.remove(_isSupMitigated, i)
+                    box.delete(_box)
+
+
+if array.size(_resistances) > 0 and barstate.isconfirmed
+    for i = array.size(_resistances) - 1 to 0 by 1
+        _box = array.get(_resistances, i)
+        _boxLow = box.get_bottom(_box)
+        _boxHigh = box.get_top(_box)
+        _boxRight = box.get_right(_box)
+        if c <= _boxHigh and bar_index == _boxRight
+            box.set_right(_box, bar_index + 1)
+        else 
+            if c > _boxHigh and bar_index == _boxRight
+                if showMitigatedZones
+                    box.set_bgcolor(_box, mitResBoxColor)
+                    box.set_border_color(_box, mitResBoxBorderColor)
+                    array.set(_isResMitigated, i, true)
+                else
+                    array.remove(_resistances, i)
+                    array.remove(_isResMitigated, i)
+                    box.delete(_box)
+
+
+// handling overlapping Boxes
+if array.size(_resistances) == maxNumOfBoxes+1 and (last_bar_index>0 and bar_index==last_bar_index-1)// and bar_index==last_bar_index
+    for i = array.size(_resistances) - 1 to 1 by 1
+        _box = array.get(_resistances, i)
+        _boxLow = box.get_bottom(_box)
+        _boxHigh = box.get_top(_box)
+        _boxLeft = box.get_left(_box)
+        _boxRight = box.get_right(_box)
+        
+        for j = i-1 to 0 by 1
+            _box2 = array.get(_resistances, j)
+            _box2Low = box.get_bottom(_box2)
+            _box2High = box.get_top(_box2)
+            _box2Left = box.get_left(_box2)
+            _box2Right = box.get_right(_box2)
+            
+            if ((_box2Low < _boxHigh) and (_boxHigh < _box2High)) or ((_box2Low < _boxLow) and (_boxLow < _box2High)) or ((_boxLow < _box2High) and (_box2High < _boxHigh)) or ((_boxLow < _box2Low) and (_box2Low < _boxHigh))
+                if _boxLeft < _box2Left and _boxRight > _box2Left and array.get(_isResMitigated, j) //That means box(i) is to the left and must be halted earlier
+                    if math.abs(_box2Left-bar_index) < 1000
+                        box.set_right(_box, _box2Left)
+                    box.set_bgcolor(_box, overlapResBoxColor)
+                    box.set_border_color(_box, overlapResBoxBorderColor)
+                else
+                    if _box2Right > _boxLeft and (array.get(_isResMitigated, i))
+                        if math.abs(_boxLeft-bar_index) < 1000
+                            box.set_right(_box2, _boxLeft)
+                        box.set_bgcolor(_box2, overlapResBoxColor)
+                        box.set_border_color(_box2, overlapResBoxBorderColor)
+
+// handling overlapping Boxes
+//if array.size(_supports) > 10 and barstate.isconfirmed// and bar_index==last_bar_index
+if array.size(_supports) == maxNumOfBoxes+1 and (last_bar_index>0 and bar_index==last_bar_index-1)// and bar_index==last_bar_index
+    for i = array.size(_supports) - 1 to 1 by 1
+        _box = array.get(_supports, i)
+        _boxLow = box.get_bottom(_box)
+        _boxHigh = box.get_top(_box)
+        _boxLeft = box.get_left(_box)
+        _boxRight = box.get_right(_box)
+        
+        for j = i-1 to 0 by 1
+            _box2 = array.get(_supports, j)
+            _box2Low = box.get_bottom(_box2)
+            _box2High = box.get_top(_box2)
+            _box2Left = box.get_left(_box2)
+            _box2Right = box.get_right(_box2)
+            
+            if ((_box2Low < _boxHigh) and (_boxHigh < _box2High)) or ((_box2Low < _boxLow) and (_boxLow < _box2High)) or ((_boxLow < _box2High) and (_box2High < _boxHigh)) or ((_boxLow < _box2Low) and (_box2Low < _boxHigh))
+                if _boxLeft < _box2Left and _boxRight > _box2Left and (array.get(_isSupMitigated, j)) //That means box(i) is to the left and must be halted earlier
+                    if math.abs(_box2Left-bar_index) < 1000
+                        box.set_right(_box, _box2Left)
+                    box.set_bgcolor(_box, overlapSupBoxColor)
+                    box.set_border_color(_box, overlapSupBoxBorderColor)
+                else
+                    if _box2Right > _boxLeft and (array.get(_isSupMitigated, i))
+                        if math.abs(_boxLeft-bar_index) < 1000
+                            box.set_right(_box2, _boxLeft)
+                        box.set_bgcolor(_box2, overlapSupBoxColor)
+                        box.set_border_color(_box2, overlapSupBoxBorderColor)
+
