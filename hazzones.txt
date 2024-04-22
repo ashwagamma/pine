@@ -2,9 +2,10 @@
 // © ashwagamma
 
 //@version=5
-indicator("HAZZONES", overlay = true, max_boxes_count = 200)
+indicator("HAZZONES", overlay = true, max_boxes_count = 500)
 
-maxNumOfBoxes = input.int(defval=15, title='Maximum # of Zone Displayed', minval=1, maxval=100, tooltip='Minimum = 1, Maximum = 100')
+maxNumOfSupBoxes = input.int(defval=15, title='Maximum # of Support Zones', minval=1, maxval=500, tooltip='Minimum = 1, Maximum = 500')
+maxNumOfResBoxes = input.int(defval=15, title='Maximum # of Resistance Zones', minval=1, maxval=500, tooltip='Minimum = 1, Maximum = 500')
 numBullBearHA = input.int(defval = 5, title='Number of bull/bear HA candles', minval=1, maxval=10)
 tf = input.timeframe("", "Timeframe")
 supBoxColor = input.color(defval=color.new(color.green, 80), title='Support Zone Color', group="Support Zone Style")
@@ -18,8 +19,7 @@ mitSupBoxColor = input.color(defval=color.new(color.gray, 85), title='Mitigated 
 mitSupBoxBorderColor = input.color(defval=color.new(color.green, 70), title='Mitigated Support Zone Border Color', group="Mitigated Zone Style", tooltip='Set Transparency to 0 to make mitigated Boxes disappear')
 
 isStrongBullishTrend(o, h, l, c) =>
-    //ta.barssince(c<=o)-1>=numBullBearHA and numBullBearHA <= ta.barssince(not((c>o and h>c and l-o>-1*(h-l)/10) or ((c[1]>o[1] and h[1]>c[1] and l[1]-o[1]>-1*(h[1]-l[1])/10) and c>=o) or ((c[2]>o[2] and h[2]>c[2] and l[2]-o[2]>-1*(h[2]-l[2])/5) and c>=o and c[1]>=o[1])))
-    ta.barssince(c<=o)-1>=numBullBearHA and numBullBearHA <= ta.barssince(not((c>o and h>c and l-o>-1*(h-l)/10) or ((c[1]>o[1] and h[1]>c[1] and l[1]-o[1]>-1*(h[1]-l[1])/10) and c>=o)))
+    ta.barssince(c<=o)-1>=numBullBearHA and numBullBearHA <= ta.barssince(not((c>o and h>c and l-o>-1*(h-l)/10) or ((c[1]>o[1] and h[1]>c[1] and l[1]-o[1]>-1*(h[1]-l[1])/10) and c>=o) or ((c[2]>o[2] and h[2]>c[2] and l[2]-o[2]>-1*(h[2]-l[2])/5) and c>=o and c[1]>=o[1])))
 
 isStrongBearishTrend(o, h, l, c) =>
     ta.barssince(c>=o)-1>=numBullBearHA and numBullBearHA <= ta.barssince(not((c<o and l<c and o-h>-1*(h-l)/10) or ((c[1]<o[1] and l[1]<c[1] and o[1]-h[1]>-1*(h[1]-l[1])/10) and c<=o) or ((c[2]<o[2] and l[2]<c[2] and o[2]-h[2]>-1*(h[2]-l[2])/5) and c<=o and c[1]<=o[1])))    
@@ -34,12 +34,11 @@ int delT = na
 [isStrongBullishTrend, isStrongBearishTrend] = request.security(ticker.heikinashi(syminfo.tickerid), tf, [isStrongBullishTrend(open, high, low, close), isStrongBearishTrend(open, high, low, close)])
 [supBoxBarDelta, resBoxBarDelta] = request.security(ticker.heikinashi(syminfo.tickerid), tf, [(ta.barssince(close<=open)), (ta.barssince(close>=open))])
 
-//plot(isStrongBearishTrend? 18500: 18200)
 
 if isStrongBullishTrend and not(isStrongBullishTrend[1]) and barstate.isconfirmed
     box supbox = na
     supbox := box.new(bar_index-supBoxBarDelta, sz_high, bar_index+1, sz_low, xloc = xloc.bar_index, border_color = supBoxBorderColor, bgcolor=supBoxColor)
-    if array.size(_supports) > maxNumOfBoxes
+    if array.size(_supports) > maxNumOfSupBoxes
         box.delete(array.shift(_supports))
     array.push(_supports, supbox)
 
@@ -47,7 +46,7 @@ if isStrongBullishTrend and not(isStrongBullishTrend[1]) and barstate.isconfirme
 if isStrongBearishTrend and not(isStrongBearishTrend[1]) and barstate.isconfirmed
     box resbox = na
     resbox := box.new(bar_index-resBoxBarDelta, rz_high, bar_index+1, rz_low, xloc = xloc.bar_index, border_color = resBoxBorderColor, bgcolor=resBoxColor)
-    if array.size(_resistances) > maxNumOfBoxes
+    if array.size(_resistances) > maxNumOfResBoxes
         box.delete(array.shift(_resistances))
     array.push(_resistances, resbox)
 
@@ -58,10 +57,14 @@ if array.size(_supports) > 0 and barstate.isconfirmed
         _boxHigh = box.get_top(_box)
         _boxRight = box.get_right(_box)
         _boxLeft = box.get_left(_box)
+
         if bar_index == _boxRight
-            if c >= _boxLow
-                box.set_right(_box, bar_index + 1)
-            else 
+            needMitigate = c < _boxLow and h < _boxLow
+            for j = 1 to 4 by 1
+                needMitigate := needMitigate and c[j]<_boxLow
+            for j = 1 to 2 by 1
+                needMitigate := needMitigate and h[j]<_boxLow
+            if needMitigate
                 if showMitigatedZones
                     box.set_bgcolor(_box, mitSupBoxColor)
                     box.set_border_color(_box, mitSupBoxBorderColor)
@@ -69,6 +72,8 @@ if array.size(_supports) > 0 and barstate.isconfirmed
                 else
                     array.remove(_supports, i)
                     box.delete(_box)
+            else 
+                box.set_right(_box, bar_index + 1)
 
 if array.size(_resistances) > 0 and barstate.isconfirmed
     for i = array.size(_resistances) - 1 to 0 by 1
@@ -77,9 +82,12 @@ if array.size(_resistances) > 0 and barstate.isconfirmed
         _boxHigh = box.get_top(_box)
         _boxRight = box.get_right(_box)
         if bar_index == _boxRight
-            if c <= _boxHigh
-                box.set_right(_box, bar_index + 1)
-            else
+            needMitigate = c > _boxHigh and l > _boxHigh
+            for j = 1 to 4 by 1
+                needMitigate := needMitigate and c[j] > _boxHigh
+            for j = 1 to 2 by 1
+                needMitigate := needMitigate and l[j] > _boxHigh
+            if needMitigate
                 if showMitigatedZones
                     box.set_bgcolor(_box, mitResBoxColor)
                     box.set_border_color(_box, mitResBoxBorderColor)
@@ -87,4 +95,6 @@ if array.size(_resistances) > 0 and barstate.isconfirmed
                 else
                     array.remove(_resistances, i)
                     box.delete(_box)
+            else
+                box.set_right(_box, bar_index + 1)
 
