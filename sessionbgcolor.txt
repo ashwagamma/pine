@@ -1,0 +1,36 @@
+//@version=5
+indicator(title='session color', shorttitle='session color', overlay=true)
+//, timeframe=''
+
+tp = hour(time(''), timezone = "America/Los_Angeles")
+tg = hour(time(''), timezone = "GMT")
+tz_gmt = (tp-tg == 17 or tp-tg == -7) ? "GMT+2" : "GMT+1"
+
+NO_COLOR     = color(na)
+
+// Allow user to change the colors.
+preMarketColor  = input.color(color.new(color.gray, 95), "Pre-market")
+regSessionColor = input.color(color(na), "Pre-market")
+postMarketColor = input.color(color.new(color.yellow, 95), "Pre-market")
+
+// Function returns `true` when the bar's time is
+timeInRange(tf, session, sessionTimeZone) =>
+    time(tf, session, sessionTimeZone) != 0
+
+// Function prints a message at the bottom-right of the chart.
+f_print(_text) =>
+    var table _t = table.new(position.bottom_right, 1, 1)
+    table.cell(_t, 0, 0, _text, bgcolor = color.yellow)
+
+var chartIs30MinOrLess = timeframe.isseconds or (timeframe.isintraday and timeframe.multiplier <=30)
+sessionColor = if chartIs30MinOrLess
+    switch
+        timeInRange(timeframe.period, "0000-1530", tz_gmt) => preMarketColor
+        timeInRange(timeframe.period, "1530-2200", tz_gmt) => na
+        timeInRange(timeframe.period, "2200-2300", tz_gmt) => postMarketColor
+        => NO_COLOR
+else
+    f_print("No background is displayed.\nChart timeframe must be <= 30min.")
+    NO_COLOR
+
+bgcolor(sessionColor)
