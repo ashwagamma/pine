@@ -11,7 +11,7 @@ minPtsToConfirmOvernightLow = input.int(defval = 12, title='Min points to move t
 minPtsToConfirmDailyLow = input.int(defval = 25, title='Min points to move to qualify daily low', minval=1, maxval=100)
 minPtsToConfirmAfternoonLow = input.int(defval = 12, title='Min points to move to qualify afternoon low', minval=1, maxval=100)
 maxNumSessionActiveOvernightLow = input.int(defval = 1, title='Number of sessions to hold overnight low', minval=1, maxval=100)
-maxNumSessionActiveDailyLow = input.int(defval = 2, title='Number of sessions to hold daily low', minval=1, maxval=100)
+maxNumSessionActiveDailyLow = input.int(defval = 5, title='Number of sessions to hold daily low', minval=1, maxval=100)
 maxNumSessionActiveAfternoonLow = input.int(defval = 2, title='Number of sessions to hold afternoon low', minval=1, maxval=100)
 enSoftFBDAlerts = input.bool(defval = true, title='Enable Soft FBD Alerts')
 enMediumFBDAlerts = input.bool(defval = true, title='Enable Medium FBD Alerts')
@@ -56,10 +56,7 @@ isStrongBullishTrend(o, h, l, c) =>
 isStrongBearishTrend(o, h, l, c) =>
     ta.barssince(c>=o)-1>=numBearHA and numBearHA <= ta.barssince(not((c<o and l<c and o-h>-1*(h-l)/10) or ((c[1]<o[1] and l[1]<c[1] and o[1]-h[1]>-1*(h[1]-l[1])/10) and c<=o) or ((c[2]<o[2] and l[2]<c[2] and o[2]-h[2]>-1*(h[2]-l[2])/5) and c<=o and c[1]<=o[1])))    
 
-[o, h, l, c] = request.security(syminfo.tickerid, timeframe.period, [open, high, low, close])
 [isStrongBullishTrend, isStrongBearishTrend] = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, [isStrongBullishTrend(open, high, low, close), isStrongBearishTrend(open, high, low, close)])
-
-
 
 getSessionLow(sessionTime,sessionTimeZone,o,h,l,c,lineColor,minPtsToConfirmLevel) =>
     //var level sessionLow = na
@@ -211,11 +208,14 @@ forceRetireHigherLow(_matrix) =>
                         if level2._level >= level1._level and not (level2.isStateBreakHard or level2.isStateBreakMedium) and level2.confirmedTime <= level1.confirmedTime
                             level2.isRetired := true
 
-[ovnl, plow1] = getSessionLow("0000-1530",tz_gmt,o,h,l,c,color.blue,minPtsToConfirmOvernightLow)
-[pdl, plow2] = getSessionLow(getTZGMTSessionStringForTF(timeframe.period),tz_gmt,o,h,l,c,color.green,minPtsToConfirmDailyLow)
-[pal, plow3] = getSessionLow("1000-1400","America/Los_Angeles",o,h,l,c, color.maroon,minPtsToConfirmAfternoonLow)
+[o_std, h_std, l_std, c_std] = request.security(syminfo.tickerid, timeframe.period, [open, high, low, close])
+[o, h, l, c] = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, [open, high, low, close])
 
-//plot(plow3, style = plot.style_circles)
+[ovnl, plow1] = getSessionLow("0000-1530",tz_gmt,o_std, h_std, l_std, c_std,color.blue,minPtsToConfirmOvernightLow)
+[pdl, plow2] = getSessionLow(getTZGMTSessionStringForTF(timeframe.period),tz_gmt,o_std, h_std, l_std, c_std,color.green,minPtsToConfirmDailyLow)
+[pal, plow3] = getSessionLow("1100-1400","America/Los_Angeles",o_std, h_std, l_std, c_std, color.maroon,minPtsToConfirmAfternoonLow)
+
+// plot(plow3, style = plot.style_circles)
 
 inPostMarketSession = not na(time(timeframe.period, "1300-1400", "America/Los_Angeles"))
 isBeginningOfPostMarketSession = inPostMarketSession and not inPostMarketSession[1]
