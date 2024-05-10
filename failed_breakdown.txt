@@ -1,0 +1,245 @@
+//@version=5
+indicator(title='Failed Breakdown', shorttitle='fbd', overlay=true, max_labels_count = 500, max_lines_count = 500)
+//, timeframe=''
+
+tp = hour(time(''), timezone = "America/Los_Angeles")
+tg = hour(time(''), timezone = "GMT")
+tz_gmt = (tp-tg == 17 or tp-tg == -7) ? "GMT+2" : "GMT+1"
+
+maxDaysBack = input.int(defval = 7, title='Max days back to process', minval=1, maxval=500)
+minPtsToConfirmOvernightLow = input.int(defval = 12, title='Min points to move to qualify overnight low', minval=1, maxval=100)
+minPtsToConfirmDailyLow = input.int(defval = 25, title='Min points to move to qualify daily low', minval=1, maxval=100)
+minPtsToConfirmAfternoonLow = input.int(defval = 12, title='Min points to move to qualify afternoon low', minval=1, maxval=100)
+maxNumSessionActiveOvernightLow = input.int(defval = 1, title='Number of sessions to hold overnight low', minval=1, maxval=100)
+maxNumSessionActiveDailyLow = input.int(defval = 2, title='Number of sessions to hold daily low', minval=1, maxval=100)
+maxNumSessionActiveAfternoonLow = input.int(defval = 2, title='Number of sessions to hold afternoon low', minval=1, maxval=100)
+enSoftFBDAlerts = input.bool(defval = true, title='Enable Soft FBD Alerts')
+enMediumFBDAlerts = input.bool(defval = true, title='Enable Medium FBD Alerts')
+enHardFBDAlerts = input.bool(defval = true, title='Enable Hard FBD Alerts')
+numBullHA = input.int(defval = 5, title='Min bull HA candles', minval=1, maxval=10)
+numBearHA = input.int(defval = 5, title='Min bear HA candles', minval=1, maxval=10)
+
+type level
+    float _level = na
+    float lowestLow = na
+    int startTime = na
+    int startBarIndex = na
+    line _line = na // x1, x2, y1, y2
+    int confirmedTime = na
+    int endTime = na
+    bool isRetired = false
+    int numSessionActive = 0 // track how many sessions level has been active for
+    bool isStateBreakSoft = false // low<_low for demand zones or high>oneHigh for supply zone
+    bool isStateBreakMedium = false // close<_low or close>_high
+    bool isStateBreakHard = false // deep breakdown/breakout criterion applied with multiple candles
+    bool isActionableForFB = true // start off being not actionable, rally strength could make it actionable
+    bool isLowestStructureOfSession = false // only use lowest structure of session for FBDs
+    bool isSoftFBDTriggered = false // If ever a Hard FBD is triggered, this will serve to invalidate zone with indecision candles
+    bool isMediumFBDTriggered = false // If ever a Hard FBD is triggered, this will serve to invalidate zone with indecision candles
+    bool isHardFBDTriggered = false // If ever a Hard FBD is triggered, this will serve to invalidate zone with indecision candles
+
+var _ovnlMatrix = matrix.new<level>(0,1)
+var _pdlMatrix  = matrix.new<level>(0,1)
+var _palMatrix  = matrix.new<level>(0,1)
+
+// Function prints a message at the bottom-right of the chart.
+f_print(_text) =>
+    var table _t = table.new(position.bottom_right, 1, 1)
+    table.cell(_t, 0, 0, _text, bgcolor = color.yellow)
+
+getTZGMTSessionStringForTF(tf) =>
+    "0000-"+str.tostring(2260-timeframe.in_seconds(tf)/60)
+
+isStrongBullishTrend(o, h, l, c) =>
+    ta.barssince(c<=o)-1>=numBullHA and numBullHA <= ta.barssince(not((c>o and h>c and l-o>-1*(h-l)/10) or ((c[1]>o[1] and h[1]>c[1] and l[1]-o[1]>-1*(h[1]-l[1])/10) and c>=o) or ((c[2]>o[2] and h[2]>c[2] and l[2]-o[2]>-1*(h[2]-l[2])/5) and c>=o and c[1]>=o[1])))
+
+isStrongBearishTrend(o, h, l, c) =>
+    ta.barssince(c>=o)-1>=numBearHA and numBearHA <= ta.barssince(not((c<o and l<c and o-h>-1*(h-l)/10) or ((c[1]<o[1] and l[1]<c[1] and o[1]-h[1]>-1*(h[1]-l[1])/10) and c<=o) or ((c[2]<o[2] and l[2]<c[2] and o[2]-h[2]>-1*(h[2]-l[2])/5) and c<=o and c[1]<=o[1])))    
+
+[o, h, l, c] = request.security(syminfo.tickerid, timeframe.period, [open, high, low, close])
+[isStrongBullishTrend, isStrongBearishTrend] = request.security(ticker.heikinashi(syminfo.tickerid), timeframe.period, [isStrongBullishTrend(open, high, low, close), isStrongBearishTrend(open, high, low, close)])
+
+
+
+getSessionLow(sessionTime,sessionTimeZone,o,h,l,c,lineColor,minPtsToConfirmLevel) =>
+    //var level sessionLow = na
+    var level sessionLow = na
+    var float pivotLow = na
+    int numPivotBars = 4
+    
+    pivotLow := ta.pivotlow(l,numPivotBars,numPivotBars)
+
+    if not na(sessionLow)
+        if sessionLow.isRetired
+            sessionLow := na
+
+    if not na(sessionLow)
+        if h-sessionLow._level > minPtsToConfirmLevel and not(sessionLow.lowestLow < sessionLow._level)
+            if na(sessionLow.confirmedTime)
+                sessionLow.confirmedTime := time
+
+
+    inCustomSession = not na(time(timeframe.period, sessionTime, sessionTimeZone))
+
+    if inCustomSession and not inCustomSession[numPivotBars]
+        if not na(pivotLow)
+            sessionLow := level.new(pivotLow, pivotLow, time, bar_index)
+        else
+            sessionLow := na
+        
+    else if inCustomSession
+        if not na(pivotLow)
+            if not na(sessionLow)
+                if pivotLow < sessionLow._level
+                    sessionLow := level.new(pivotLow, pivotLow, time, bar_index)
+                sessionLow._level := math.min(sessionLow._level, pivotLow)
+            else
+                sessionLow := level.new(pivotLow, pivotLow, time, bar_index)
+    
+    else if not(inCustomSession)
+        if not na(pivotLow)
+            if not na(sessionLow)
+                // i.e. we have a new low we are tracking but we've exited the session
+                // keep updating the lowest low make sure it's not lower than the sessionLow when confirming it outside the session below
+                if pivotLow < sessionLow.lowestLow
+                    sessionLow.lowestLow := math.min(sessionLow.lowestLow, l)
+                    //line.new(sessionLow.startTime, sessionLow._level, time, sessionLow.lowestLow, xloc=xloc.bar_time)
+
+
+
+    [sessionLow, pivotLow]
+
+updateMatrix(_levelObjMatrix, _levelObj, _isBeginningOfSession, maxNumSessionActive=0, lineColor) =>
+    if not na(_levelObj)
+        if _levelObj.confirmedTime == time
+            _levelObjMatrix.add_row()
+            _line = line.new(_levelObj.confirmedTime, _levelObj._level, time, _levelObj._level, xloc=xloc.bar_time, color=lineColor)
+            _levelObjMatrix.set(_levelObjMatrix.rows()-1, 0, level.new(_levelObj._level, _levelObj.lowestLow, _levelObj.startTime, _levelObj.startBarIndex, _line, _levelObj.confirmedTime))
+        else 
+            if _levelObjMatrix.rows() > 0
+                for i = _levelObjMatrix.rows()-1 to 0 by 1
+                    level _obj = _levelObjMatrix.get(i, 0)
+                    if _isBeginningOfSession
+                        _obj.numSessionActive := _obj.numSessionActive + 1
+                        if _obj.numSessionActive > maxNumSessionActive
+                            _obj.isRetired := true
+                    if not(_obj.isRetired)
+                        line.set_x2(_obj._line,time)
+
+AnalyzeFBD(_matrix, o, h, l, c) =>
+    if _matrix.rows() > 0
+        for row = _matrix.rows()-1 to 0 by 1
+            _level = _matrix.get(row, 0)
+            bool enLabelBD = false
+            bool enLabelFBD = true
+            if not(_level.isRetired)
+                if (_level.isStateBreakSoft or _level.isStateBreakMedium or _level.isStateBreakHard)
+                    if _level.isStateBreakHard
+                        if (o > _level._level and c>o) or (isStrongBullishTrend and h > _level._level and c>o)
+                            if enLabelFBD
+                                label.new(bar_index, _level._level, "FH", size=size.normal, color=color.green, textcolor = color.white, style=label.style_label_up)
+                            if enHardFBDAlerts
+                                alert("Hfbd "+str.tostring(_level._level), alert.freq_once_per_bar)
+                            _level.isStateBreakHard := false
+                            _level.isRetired := true
+                    else if _level.isStateBreakMedium and (c > _level._level and c>o)
+                        if enLabelFBD
+                            label.new(bar_index, _level._level, "FM", size=size.normal, color=color.orange, textcolor = color.white, style=label.style_label_up)
+                        if enMediumFBDAlerts
+                            alert("Mfbd "+str.tostring(_level._level), alert.freq_once_per_bar)
+                        _level.isStateBreakMedium := false
+                    else if _level.isStateBreakSoft and (c > _level._level and c>o)
+                        if enLabelFBD
+                            label.new(bar_index, _level._level, "FS", size=size.normal, color=color.yellow, textcolor = color.black, style=label.style_label_up)
+                        if enSoftFBDAlerts
+                            alert("Sfbd "+str.tostring(_level._level), alert.freq_once_per_bar)
+                        _level.isStateBreakSoft := false
+            
+                isFailed = c < _level._level and h < _level._level and c < o
+                //if isFailed
+                //    for j = 1 to 4 by 1
+                //        isFailed := isFailed and c[j]<_level._low
+                //    for j = 1 to 2 by 1
+                //        isFailed := isFailed and h[j]<_level._low
+                if isFailed and not(_level.isStateBreakHard) and not(_level.isHardFBDTriggered)
+                    _level.isStateBreakSoft := false
+                    _level.isStateBreakMedium := false
+                    _level.isStateBreakHard := true
+                    _level.isHardFBDTriggered := true
+                    if enLabelBD
+                        label.new(bar_index, _level._level, "BH"+str.tostring(row), size=size.small, color=color.green, textcolor = color.white, style=label.style_label_down)
+                else if c < _level._level and c < o and not(_level.isStateBreakHard or _level.isStateBreakMedium) and not(_level.isHardFBDTriggered or _level.isMediumFBDTriggered)
+                    _level.isStateBreakSoft := false
+                    _level.isStateBreakMedium := true
+                    _level.isStateBreakHard := false
+                    _level.isMediumFBDTriggered := true
+                    if enLabelBD
+                        label.new(bar_index, _level._level, "BM"+str.tostring(row), size=size.small, color=color.orange, textcolor = color.black, style=label.style_label_down)
+                else if l < _level._level and c < o and not(_level.isStateBreakHard or _level.isStateBreakMedium or _level.isStateBreakSoft) and not(_level.isSoftFBDTriggered or _level.isMediumFBDTriggered or _level.isHardFBDTriggered)// and not(time-_level.startTime>24*60*60*1000)
+                    _level.isStateBreakSoft := true
+                    _level.isStateBreakMedium := false
+                    _level.isStateBreakHard := false
+                    _level.isSoftFBDTriggered := true
+                    if enLabelBD
+                        label.new(bar_index, _level._level, "BS"+str.tostring(row), size=size.small, color=color.yellow, textcolor = color.black, style=label.style_label_down)
+                // else
+                //     if enLabelBD
+                //         label.new(bar_index, _level._level, "BX"+str.tostring(row), size=size.small, color=color.fuchsia, textcolor = color.black, style=label.style_label_down)
+
+    
+    true
+
+forceRetireMasterSlaveOverlap(_masterMatrix, _slaveMatrix) =>
+    if _masterMatrix.rows() > 0 and _slaveMatrix.rows() > 0
+        for i = _masterMatrix.rows()-1 to 0 by 1
+            level masterLevel = _masterMatrix.get(i, 0)
+            if not masterLevel.isRetired
+                for j = _slaveMatrix.rows()-1 to 0 by 1
+                    level slaveLevel = _slaveMatrix.get(j, 0)
+                    if not slaveLevel.isRetired
+                        if masterLevel._level == slaveLevel._level
+                            slaveLevel.isRetired := true
+
+forceRetireHigherLow(_matrix) =>
+    if _matrix.rows() > 1 // need at least two levels to do this
+        for i = _matrix.rows()-1 to 1 by 1
+            level1 = _matrix.get(i, 0)
+            if not level1.isRetired
+                for j = i-1 to 0 by 1
+                    level2 = _matrix.get(j, 0)
+                    if not level2.isRetired
+                        if level2._level >= level1._level and not (level2.isStateBreakHard or level2.isStateBreakMedium) and level2.confirmedTime <= level1.confirmedTime
+                            level2.isRetired := true
+
+[ovnl, plow1] = getSessionLow("0000-1530",tz_gmt,o,h,l,c,color.blue,minPtsToConfirmOvernightLow)
+[pdl, plow2] = getSessionLow(getTZGMTSessionStringForTF(timeframe.period),tz_gmt,o,h,l,c,color.green,minPtsToConfirmDailyLow)
+[pal, plow3] = getSessionLow("1000-1400","America/Los_Angeles",o,h,l,c, color.maroon,minPtsToConfirmAfternoonLow)
+
+//plot(plow3, style = plot.style_circles)
+
+inPostMarketSession = not na(time(timeframe.period, "1300-1400", "America/Los_Angeles"))
+isBeginningOfPostMarketSession = inPostMarketSession and not inPostMarketSession[1]
+
+// Update matrices using ovnl object, inside the script if it's just been confirmed it will be added to the matrix
+if barstate.isconfirmed and (timenow-time)/(1000*60*60*24) < maxDaysBack
+    updateMatrix(_ovnlMatrix, ovnl, isBeginningOfPostMarketSession, maxNumSessionActiveOvernightLow-1, color.blue)
+    updateMatrix(_pdlMatrix, pdl, isBeginningOfPostMarketSession, maxNumSessionActiveDailyLow-1, color.red)
+    updateMatrix(_palMatrix, pal, isBeginningOfPostMarketSession, maxNumSessionActiveAfternoonLow-1, color.fuchsia)
+
+    //plot(isBeginningOfSession?5200:na, color=color.red, style=plot.style_circles)
+    //plot(isStrongBullishTrend?5100:na, color=color.red, style=plot.style_circles)
+    // Unless a level is in breakdown state, let the lower low take over
+    forceRetireHigherLow(_ovnlMatrix)
+    forceRetireHigherLow(_pdlMatrix)
+    forceRetireHigherLow(_palMatrix)
+
+    // Retire levels in slave matrix that are same as master matrix, eg. if daily low and overnight low are same, then retire overnight low
+    forceRetireMasterSlaveOverlap(_pdlMatrix, _ovnlMatrix)
+    forceRetireMasterSlaveOverlap(_pdlMatrix, _palMatrix)
+    forceRetireMasterSlaveOverlap(_palMatrix, _ovnlMatrix)
+
+    // FBD analysis
+    AnalyzeFBD(_ovnlMatrix, o, h, l, c)
+    AnalyzeFBD(_pdlMatrix, o, h, l, c)
+    AnalyzeFBD(_palMatrix, o, h, l, c)
+
