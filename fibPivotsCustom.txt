@@ -15,6 +15,18 @@ f_print(_text) =>
     var table _t = table.new(position.bottom_right, 1, 1)
     table.cell(_t, 0, 0, str.tostring(_text), bgcolor = color.yellow)
 
+//
+updateLineLabel(arrLine, arrLabel, idx, startTime, endTime, val) =>
+    line _line = na
+    label _label = na
+    _line := array.get(arrLine, idx)
+    _line.set_xy1(startTime, val)
+    _line.set_xy2(endTime, val)
+    _label := array.get(arrLabel, idx)
+    _label.set_xy(endTime, val)
+    _label.set_text(str.tostring(val))
+    
+
 //Pivot Points 
 pivotTimeFrame = input.timeframe('D', group = "Main Settings")
 showlastLTF = input(title='Show Only Last Period', defval=true, group = "Main Settings")
@@ -116,43 +128,17 @@ if na(array.get(lineArrRes,0)) //  initialize the arrays of lines
 else
     if timeframe.change(pivotTimeFrame)
         for i = 0 to array.size(fibList) - 1
-            line _line = na
-            label _label = na
             _valRes = fibrange(pvp, pHigh, pLow, array.get(fibList, i))
-            _line := array.get(lineArrRes, i)
-            _line.set_xy1(startTime, _valRes)
-            _line.set_xy2(endTime, _valRes)
-            _label := array.get(labelArrRes, i)
-            _label.set_xy(endTime, _valRes)
-            _label.set_text(str.tostring(_valRes))
-
+            updateLineLabel(lineArrRes, labelArrRes, i, startTime, endTime, _valRes)
             _valSup = fibrange(pvp, pHigh, pLow, -array.get(fibList, i))
-            _line := array.get(lineArrSup, i)
-            _line.set_xy1(startTime, _valSup)
-            _line.set_xy2(endTime, _valSup)
-            _label := array.get(labelArrSup, i)
-            _label.set_xy(endTime, _valSup)
-            _label.set_text(str.tostring(_valSup))
+            updateLineLabel(lineArrSup, labelArrSup, i, startTime, endTime, _valSup)
 
     if barstate.isconfirmed or timeframe.change(pivotTimeFrame)
         for i = 0 to array.size(fibList) - 1
-            line _line = na
-            label _label = na
             _valRollingRes = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, array.get(fibList, i))
-            _line := array.get(lineArrRollingRes, i)
-            _line.set_xy1(startTimeRolling, _valRollingRes)
-            _line.set_xy2(endTimeRolling, _valRollingRes)
-            _label := array.get(labelArrRollingRes, i)
-            _label.set_xy(endTimeRolling, _valRollingRes)
-            _label.set_text(str.tostring(_valRollingRes))
-
+            updateLineLabel(lineArrRollingRes, labelArrRollingRes, i, startTimeRolling, endTimeRolling, _valRollingRes)
             _valRollingSup = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, -array.get(fibList, i))
-            _line := array.get(lineArrRollingSup, i)
-            _line.set_xy1(startTimeRolling, _valRollingSup)
-            _line.set_xy2(endTimeRolling, _valRollingSup)
-            _label := array.get(labelArrRollingSup, i)
-            _label.set_xy(endTimeRolling, _valRollingSup)
-            _label.set_text(str.tostring(_valRollingSup))
+            updateLineLabel(lineArrRollingSup, labelArrRollingSup, i, startTimeRolling, endTimeRolling, _valRollingSup)
 
 
 tcpvp = ta.change(pvp)
