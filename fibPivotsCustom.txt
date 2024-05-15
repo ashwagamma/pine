@@ -1,0 +1,253 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ashwagamma
+//@version=5
+indicator("myFibPivots", overlay=true, max_bars_back = 1000, max_lines_count = 100)
+
+quantizeToTick(float val) =>
+    float(int(val/syminfo.mintick+0.5))*syminfo.mintick
+
+fibrange(pv, h, l, ratio) =>
+    x = pv + (h - l) * ratio
+    quantizeToTick(x)
+
+// Function prints a message at the bottom-right of the chart.
+f_print(_text) =>
+    var table _t = table.new(position.bottom_right, 1, 1)
+    table.cell(_t, 0, 0, str.tostring(_text), bgcolor = color.yellow)
+
+//Pivot Points 
+higherTF = input.timeframe('D', group = "Main Settings")
+showlastLTF = input(title='Show Only Last Period', defval=true, group = "Main Settings")
+
+colorRes     = input.color(color.orange, title = "Resistance Color", group = "Style Settings")
+colorSup     = input.color(color.orange,   title = "Support Color", group = "Style Settings")
+colorPivot      = input.color(color.blue, title = "Pivot Color", group = "Style Settings")
+width     = input.int(2, minval=1, title = "Line Width", group = "Style Settings")
+widthMinor     = input.int(1, minval=1, title = "Line Width Minor", group = "Style Settings")
+trans     = input.int(25, minval=1, title = "Line Transparency", group = "Style Settings")
+transMinor     = input.int(75, minval=1, title = "Line Transparency Minor", group = "Style Settings")
+lstyleLTF = input.string(title='Line Style', options=['Solid', 'Circles', 'Cross'], defval='Solid', group = "Style Settings")
+
+
+var float rollingHigh = na
+var float rollingLow = na
+
+var float closeBarLastTF = na
+var float rollingLowTFChg = na
+var float rollingHighTFChg = na
+
+float[] fibList = array.from(0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.382, 1.618, 2)
+int[] transp = array.from(65, 25, 65, 25, 65, 25, 65, 65, 65, 65)
+int[] transpLabel = array.from(100, 25, 100, 25, 100, 25, 100, 100, 100, 100)
+int[] transpRolling = array.from(65, 25, 65, 25, 65, 25, 65, 65, 65, 65)
+int[] transpRollingLabel = array.from(100, 65, 100, 65, 100, 65, 100, 100, 100, 100)
+int[] lineWidth = array.from(1, 2, 1, 2, 1, 2, 1, 1, 1, 1)
+int[] lineWidthRolling = array.from(1, 2, 1, 2, 1, 2, 1, 1, 1, 1)
+int lineWidthPivot = 2
+var valArrRes = array.new<float>(10, 0)
+var valArrSup = array.new<float>(10, 0)
+var valArrRollingRes = array.new<float>(10, 0)
+var valArrRollingSup = array.new<float>(10, 0)
+
+var line linePivot = line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_solid)
+var line lineRollingPivot = line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_dotted)
+var label labelPivot = label.new(bar_index, 0, "", xloc=xloc.bar_index, color=color.new(na,100), textcolor=colorPivot, size=size.normal, style=label.style_label_left, textalign = text.align_center)
+var label labelRollingPivot =  label.new(bar_index, 0, "", xloc=xloc.bar_index, color=color.new(na,100), textcolor=colorPivot, size=size.small, style=label.style_label_left, textalign = text.align_center)
+var line[] lineArrRes = array.new_line(10, na)
+var line[] lineArrSup = array.new_line(10, na)
+var line[] lineArrRollingRes = array.new_line(10, na)
+var line[] lineArrRollingSup = array.new_line(10, na)
+var label[] labelArrRes = array.new_label(10, na)
+var label[] labelArrSup = array.new_label(10, na)
+var label[] labelArrRollingRes = array.new_label(10, na)
+var label[] labelArrRollingSup = array.new_label(10, na)
+
+
+
+int nbarsInDay = 23*60*60/timeframe.in_seconds(timeframe.period)
+var int n1 = 0
+
+type pivotLine
+    line _line = na
+    bool isLatest = true
+    bool isRetired = false
+
+var pivotMatrix = matrix.new<pivotLine>(0,1)
+
+pHigh = request.security(syminfo.tickerid, higherTF, high[1], lookahead=barmerge.lookahead_on)
+pLow = request.security(syminfo.tickerid, higherTF, low[1], lookahead=barmerge.lookahead_on)
+pClose = request.security(syminfo.tickerid, higherTF, close[1], lookahead=barmerge.lookahead_on)
+
+islastLTF = showlastLTF ? request.security(syminfo.tickerid, higherTF, barstate.islast, lookahead=barmerge.lookahead_on) : true
+linestyleLTF = lstyleLTF == 'Solid' ? plot.style_linebr : lstyleLTF == 'Circles' ? plot.style_circles : plot.style_cross
+
+barsSinceTFChange = nz(ta.barssince(timeframe.change(higherTF)))
+closeBarLastTF := close[barsSinceTFChange+1]
+rollingHighTFChg := ta.highest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
+rollingLowTFChg := ta.lowest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
+
+if timeframe.change(higherTF)
+    n1 := barsSinceTFChange[1]
+    //f_print(str.tostring(n1))
+
+closeForPVP = timeframe.isintraday ? closeBarLastTF : pClose
+pvp = quantizeToTick((pHigh + pLow + closeForPVP) / 3)
+pvpRolling = quantizeToTick((rollingHighTFChg + rollingLowTFChg + close) / 3)
+barIndexNextTFStart = bar_index + nbarsInDay-barsSinceTFChange
+barIndexCurTFStart = bar_index-barsSinceTFChange
+
+taChangePVP = ta.change(pvp)
+// plot(taChangePVP+5240)
+
+if na(array.get(lineArrRes,0)) //  initialize the arrays of lines
+    for i = 0 to array.size(fibList) - 1
+        array.set(lineArrRes, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorRes, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
+        array.set(labelArrRes, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrSup, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorSup, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
+        array.set(labelArrSup, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrRollingRes, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorRes, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
+        array.set(labelArrRollingRes, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrRollingSup, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorSup, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
+        array.set(labelArrRollingSup, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
+else
+    if barstate.isconfirmed
+        for i = 0 to array.size(fibList) - 1
+            line _line = na
+            label _label = na
+            _valRes = fibrange(pvp, pHigh, pLow, array.get(fibList, i))
+            _line := array.get(lineArrRes, i)
+            _line.set_xy1(barIndexCurTFStart, _valRes)
+            _line.set_xy2(barIndexCurTFStart+nbarsInDay, _valRes)
+            _label := array.get(labelArrRes, i)
+            _label.set_xy(barIndexCurTFStart+nbarsInDay, _valRes)
+            _label.set_text(str.tostring(_valRes))
+
+            _valSup = fibrange(pvp, pHigh, pLow, -array.get(fibList, i))
+            _line := array.get(lineArrSup, i)
+            _line.set_xy1(barIndexCurTFStart, _valSup)
+            _line.set_xy2(barIndexCurTFStart+nbarsInDay, _valSup)
+            _label := array.get(labelArrSup, i)
+            _label.set_xy(barIndexCurTFStart+nbarsInDay, _valSup)
+            _label.set_text(str.tostring(_valSup))
+
+            _valRollingRes = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, array.get(fibList, i))
+            _line := array.get(lineArrRollingRes, i)
+            _line.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, _valRollingRes)
+            _line.set_xy2(barIndexNextTFStart+nbarsInDay, _valRollingRes)
+            _label := array.get(labelArrRollingRes, i)
+            _label.set_xy(barIndexNextTFStart+nbarsInDay, _valRollingRes)
+            _label.set_text(str.tostring(_valRollingRes))
+
+            _valRollingSup = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, -array.get(fibList, i))
+            _line := array.get(lineArrRollingSup, i)
+            _line.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, _valRollingSup)
+            _line.set_xy2(barIndexNextTFStart+nbarsInDay, _valRollingSup)
+            _label := array.get(labelArrRollingSup, i)
+            _label.set_xy(barIndexNextTFStart+nbarsInDay, _valRollingSup)
+            _label.set_text(str.tostring(_valRollingSup))
+
+tcpvp = ta.change(pvp)
+
+// plot(pvp, color=color.fuchsia)
+// plot(pvpRolling, color=color.maroon)
+if barstate.isconfirmed// and ta.change(pvpRolling) != 0  //session.islastbar_regular
+    linePivot.set_xy1(barIndexCurTFStart, pvp)
+    linePivot.set_xy2(barIndexCurTFStart+nbarsInDay, pvp)
+    labelPivot.set_xy(barIndexCurTFStart+nbarsInDay, pvp)
+    labelPivot.set_text(str.tostring(pvp))
+
+    lineRollingPivot.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, pvpRolling)
+    lineRollingPivot.set_xy2(barIndexNextTFStart+nbarsInDay, pvpRolling)
+    labelRollingPivot.set_xy(barIndexNextTFStart+nbarsInDay, pvpRolling)
+    labelRollingPivot.set_text(str.tostring(pvpRolling))
+
+    if timeframe.change(higherTF) //and ta.change(pvp) != 0  //session.islastbar_regular
+        if pivotMatrix.rows() > 0
+            pivotLine _pivotLine = pivotMatrix.get(pivotMatrix.rows()-1,0)
+            _pivotLine.isLatest := false
+        pivotMatrix.add_row()
+        pivotMatrix.set(pivotMatrix.rows()-1,0,pivotLine.new(linePivot.copy()))
+
+
+    // retire pivot lines that have been breached, and extend lines that have not yet been touched
+    for i = (pivotMatrix.rows()>0?pivotMatrix.rows()-1:na) to 0 by 1
+        pivotLine _pivotLine = pivotMatrix.get(i, 0)
+        if not(_pivotLine.isRetired) // i.e. line is still active
+            if low < _pivotLine._line.get_y1() and high > _pivotLine._line.get_y1()
+                _pivotLine.isRetired := true
+                _pivotLine._line.set_x2(bar_index)
+            else
+                _pivotLine._line.set_x2(last_bar_index)
+        if not _pivotLine.isLatest
+            _pivotLine._line.set_width(1)
+            if _pivotLine._line.get_x2() - _pivotLine._line.get_x1() >= nbarsInDay
+                _pivotLine._line.set_color(color.fuchsia)
+                _pivotLine._line.set_style(line.style_solid)
+            else
+                _pivotLine._line.set_color(color.new(color.fuchsia, 100))
+
+
+
+
+
+
+
+// f0 = input.float(defval=0.236, title='F0', group = "Levels")
+// f1 = input.float(defval=0.382, title='F1', group = "Levels")
+// f2 = input.float(defval=0.5, title='F2', group = "Levels")
+// f3 = input.float(defval=0.618, title='F3', group = "Levels")
+// f4 = input.float(defval=0.786, title='F4', group = "Levels")
+// f5 = input.float(defval=1.000, title='F5', group = "Levels")
+// f6 = input.float(defval=1.272, title='F6', group = "Levels")
+// f7 = input.float(defval=1.382, title='F7', group = "Levels")
+// f8 = input.float(defval=1.618, title='F8', group = "Levels")
+// f9 = input.float(defval=2, title='F9', group = "Levels")
+
+// vR0 = fibrange(pvp, pHigh, pLow, f0)
+// vR1 = fibrange(pvp, pHigh, pLow, f1)
+// vR2 = fibrange(pvp, pHigh, pLow, f2)
+// vR3 = fibrange(pvp, pHigh, pLow, f3)
+// vR4 = fibrange(pvp, pHigh, pLow, f4)
+// vR5 = fibrange(pvp, pHigh, pLow, f5)
+// vR6 = fibrange(pvp, pHigh, pLow, f6)
+// vR7 = fibrange(pvp, pHigh, pLow, f7)
+// vR8 = fibrange(pvp, pHigh, pLow, f8)
+// vR9 = fibrange(pvp, pHigh, pLow, f9)
+
+// vS0 = fibrange(pvp, pHigh, pLow, -f0)
+// vS1 = fibrange(pvp, pHigh, pLow, -f1)
+// vS2 = fibrange(pvp, pHigh, pLow, -f2)
+// vS3 = fibrange(pvp, pHigh, pLow, -f3)
+// vS4 = fibrange(pvp, pHigh, pLow, -f4)
+// vS5 = fibrange(pvp, pHigh, pLow, -f5)
+// vS6 = fibrange(pvp, pHigh, pLow, -f6)
+// vS7 = fibrange(pvp, pHigh, pLow, -f7)
+// vS8 = fibrange(pvp, pHigh, pLow, -f8)
+// vS9 = fibrange(pvp, pHigh, pLow, -f9)
+
+// pvplot = plot(islastLTF ? tcpvp != 0 ? na : pvp : na, color=color.new(colorPivot,trans), title='PP', style=plot.style_linebr, linewidth=width, display = display.pane)
+
+// res0 = plot(islastLTF and vR0 > 0 ? ta.change(vR0) != 0 ? na : vR0 : na, color=color.new(colorRes,transMinor), title='R0', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res1 = plot(islastLTF and vR1 > 0 ? ta.change(vR1) != 0 ? na : vR1 : na, color=color.new(colorRes,trans), title='R1', style=linestyleLTF, linewidth=width, display = display.pane)
+// res2 = plot(islastLTF and vR2 > 0 ? ta.change(vR2) != 0 ? na : vR2 : na, color=color.new(colorRes,transMinor), title='R2', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res3 = plot(islastLTF and vR3 > 0 ? ta.change(vR3) != 0 ? na : vR3 : na, color=color.new(colorRes,trans), title='R3', style=linestyleLTF, linewidth=width, display = display.pane)
+// res4 = plot(islastLTF and vR4 > 0 ? ta.change(vR4) != 0 ? na : vR4 : na, color=color.new(colorRes,transMinor), title='R4', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res5 = plot(islastLTF and vR5 > 0 ? ta.change(vR5) != 0 ? na : vR5 : na, color=color.new(colorRes,trans), title='R5', style=linestyleLTF, linewidth=width, display = display.pane)
+// res6 = plot(islastLTF and vR6 > 0 ? ta.change(vR6) != 0 ? na : vR6 : na, color=color.new(colorRes,transMinor), title='R6', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res7 = plot(islastLTF and vR7 > 0 ? ta.change(vR7) != 0 ? na : vR7 : na, color=color.new(colorRes,transMinor), title='R7', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res8 = plot(islastLTF and vR8 > 0 ? ta.change(vR8) != 0 ? na : vR8 : na, color=color.new(colorRes,transMinor), title='R8', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// res9 = plot(islastLTF and vR9 > 0 ? ta.change(vR9) != 0 ? na : vR9 : na, color=color.new(colorRes,transMinor), title='R9', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup0 = plot(islastLTF and vS0 > 0 ? ta.change(vS0) != 0 ? na : vS0 : na, color=color.new(colorSup,transMinor), title='S0', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup1 = plot(islastLTF and vS1 > 0 ? ta.change(vS1) != 0 ? na : vS1 : na, color=color.new(colorSup,trans), title='S1', style=linestyleLTF, linewidth=width, display = display.pane)
+// sup2 = plot(islastLTF and vS2 > 0 ? ta.change(vS2) != 0 ? na : vS2 : na, color=color.new(colorSup,transMinor), title='S2', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup3 = plot(islastLTF and vS3 > 0 ? ta.change(vS3) != 0 ? na : vS3 : na, color=color.new(colorSup,trans), title='S3', style=linestyleLTF, linewidth=width, display = display.pane)
+// sup4 = plot(islastLTF and vS4 > 0 ? ta.change(vS4) != 0 ? na : vS4 : na, color=color.new(colorSup,transMinor), title='S4', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup5 = plot(islastLTF and vS5 > 0 ? ta.change(vS5) != 0 ? na : vS5 : na, color=color.new(colorSup,trans), title='S5', style=linestyleLTF, linewidth=width, display = display.pane)
+// sup6 = plot(islastLTF and vS6 > 0 ? ta.change(vS6) != 0 ? na : vS6 : na, color=color.new(colorSup,transMinor), title='S6', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup7 = plot(islastLTF and vS7 > 0 ? ta.change(vS7) != 0 ? na : vS7 : na, color=color.new(colorSup,transMinor), title='S7', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup8 = plot(islastLTF and vS8 > 0 ? ta.change(vS8) != 0 ? na : vS8 : na, color=color.new(colorSup,transMinor), title='S8', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// sup9 = plot(islastLTF and vS9 > 0 ? ta.change(vS9) != 0 ? na : vS9 : na, color=color.new(colorSup,transMinor), title='S9', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+
+// var bool lvs = na
+// lvs := close>vR5
+// bgcolor(lvs[1]==false and lvs==true ? color.black : na)
