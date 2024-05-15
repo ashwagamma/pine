@@ -16,7 +16,7 @@ f_print(_text) =>
     table.cell(_t, 0, 0, str.tostring(_text), bgcolor = color.yellow)
 
 //Pivot Points 
-higherTF = input.timeframe('D', group = "Main Settings")
+pivotTimeFrame = input.timeframe('D', group = "Main Settings")
 showlastLTF = input(title='Show Only Last Period', defval=true, group = "Main Settings")
 
 colorRes     = input.color(color.orange, title = "Resistance Color", group = "Style Settings")
@@ -49,10 +49,10 @@ var valArrSup = array.new<float>(10, 0)
 var valArrRollingRes = array.new<float>(10, 0)
 var valArrRollingSup = array.new<float>(10, 0)
 
-var line linePivot = line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_solid)
-var line lineRollingPivot = line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_dotted)
-var label labelPivot = label.new(bar_index, 0, "", xloc=xloc.bar_index, color=color.new(na,100), textcolor=colorPivot, size=size.normal, style=label.style_label_left, textalign = text.align_center)
-var label labelRollingPivot =  label.new(bar_index, 0, "", xloc=xloc.bar_index, color=color.new(na,100), textcolor=colorPivot, size=size.small, style=label.style_label_left, textalign = text.align_center)
+var line linePivot = line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_solid)
+var line lineRollingPivot = line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_dotted)
+var label labelPivot = label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(na,100), textcolor=colorPivot, size=size.normal, style=label.style_label_left, textalign = text.align_center)
+var label labelRollingPivot =  label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(na,100), textcolor=colorPivot, size=size.small, style=label.style_label_left, textalign = text.align_center)
 var line[] lineArrRes = array.new_line(10, na)
 var line[] lineArrSup = array.new_line(10, na)
 var line[] lineArrRollingRes = array.new_line(10, na)
@@ -64,8 +64,7 @@ var label[] labelArrRollingSup = array.new_label(10, na)
 
 
 
-int nbarsInDay = 23*60*60/timeframe.in_seconds(timeframe.period)
-var int n1 = 0
+int numMilliSecondsInPivotTF = timeframe.in_seconds(pivotTimeFrame) * 1000
 
 type pivotLine
     line _line = na
@@ -74,94 +73,104 @@ type pivotLine
 
 var pivotMatrix = matrix.new<pivotLine>(0,1)
 
-pHigh = request.security(syminfo.tickerid, higherTF, high[1], lookahead=barmerge.lookahead_on)
-pLow = request.security(syminfo.tickerid, higherTF, low[1], lookahead=barmerge.lookahead_on)
-pClose = request.security(syminfo.tickerid, higherTF, close[1], lookahead=barmerge.lookahead_on)
+pHigh = request.security(syminfo.tickerid, pivotTimeFrame, high[1], lookahead=barmerge.lookahead_on)
+pLow = request.security(syminfo.tickerid, pivotTimeFrame, low[1], lookahead=barmerge.lookahead_on)
+pClose = request.security(syminfo.tickerid, pivotTimeFrame, close[1], lookahead=barmerge.lookahead_on)
 
-islastLTF = showlastLTF ? request.security(syminfo.tickerid, higherTF, barstate.islast, lookahead=barmerge.lookahead_on) : true
+islastLTF = showlastLTF ? request.security(syminfo.tickerid, pivotTimeFrame, barstate.islast, lookahead=barmerge.lookahead_on) : true
 linestyleLTF = lstyleLTF == 'Solid' ? plot.style_linebr : lstyleLTF == 'Circles' ? plot.style_circles : plot.style_cross
 
-barsSinceTFChange = nz(ta.barssince(timeframe.change(higherTF)))
+barsSinceTFChange = nz(ta.barssince(timeframe.change(pivotTimeFrame)))
 closeBarLastTF := close[barsSinceTFChange+1]
 rollingHighTFChg := ta.highest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
 rollingLowTFChg := ta.lowest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
 
-if timeframe.change(higherTF)
-    n1 := barsSinceTFChange[1]
-    //f_print(str.tostring(n1))
-
 closeForPVP = timeframe.isintraday ? closeBarLastTF : pClose
 pvp = quantizeToTick((pHigh + pLow + closeForPVP) / 3)
 pvpRolling = quantizeToTick((rollingHighTFChg + rollingLowTFChg + close) / 3)
-barIndexNextTFStart = bar_index + nbarsInDay-barsSinceTFChange
-barIndexCurTFStart = bar_index-barsSinceTFChange
 
 taChangePVP = ta.change(pvp)
 // plot(taChangePVP+5240)
 
+var int startTime = na
+var int startTimeRolling = na
+var int endTime = na
+var int endTimeRolling = na
+if timeframe.change(pivotTimeFrame)
+    startTime := time
+    endTime := startTime + numMilliSecondsInPivotTF
+    startTimeRolling := endTime + 3*numMilliSecondsInPivotTF/4
+    endTimeRolling := endTime + numMilliSecondsInPivotTF
+
+
 if na(array.get(lineArrRes,0)) //  initialize the arrays of lines
     for i = 0 to array.size(fibList) - 1
-        array.set(lineArrRes, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorRes, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
-        array.set(labelArrRes, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
-        array.set(lineArrSup, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorSup, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
-        array.set(labelArrSup, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
-        array.set(lineArrRollingRes, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorRes, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
-        array.set(labelArrRollingRes, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
-        array.set(lineArrRollingSup, i, line.new(bar_index, 0, bar_index+1, 0, color=color.new(colorSup, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
-        array.set(labelArrRollingSup, i, label.new(bar_index, 0, "", color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrRes, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorRes, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
+        array.set(labelArrRes, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrSup, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorSup, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
+        array.set(labelArrSup, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrRollingRes, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorRes, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
+        array.set(labelArrRollingRes, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
+        array.set(lineArrRollingSup, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorSup, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
+        array.set(labelArrRollingSup, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
 else
-    if barstate.isconfirmed
+    if timeframe.change(pivotTimeFrame)
         for i = 0 to array.size(fibList) - 1
             line _line = na
             label _label = na
             _valRes = fibrange(pvp, pHigh, pLow, array.get(fibList, i))
             _line := array.get(lineArrRes, i)
-            _line.set_xy1(barIndexCurTFStart, _valRes)
-            _line.set_xy2(barIndexCurTFStart+nbarsInDay, _valRes)
+            _line.set_xy1(startTime, _valRes)
+            _line.set_xy2(endTime, _valRes)
             _label := array.get(labelArrRes, i)
-            _label.set_xy(barIndexCurTFStart+nbarsInDay, _valRes)
+            _label.set_xy(endTime, _valRes)
             _label.set_text(str.tostring(_valRes))
 
             _valSup = fibrange(pvp, pHigh, pLow, -array.get(fibList, i))
             _line := array.get(lineArrSup, i)
-            _line.set_xy1(barIndexCurTFStart, _valSup)
-            _line.set_xy2(barIndexCurTFStart+nbarsInDay, _valSup)
+            _line.set_xy1(startTime, _valSup)
+            _line.set_xy2(endTime, _valSup)
             _label := array.get(labelArrSup, i)
-            _label.set_xy(barIndexCurTFStart+nbarsInDay, _valSup)
+            _label.set_xy(endTime, _valSup)
             _label.set_text(str.tostring(_valSup))
 
+    if barstate.isconfirmed or timeframe.change(pivotTimeFrame)
+        for i = 0 to array.size(fibList) - 1
+            line _line = na
+            label _label = na
             _valRollingRes = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, array.get(fibList, i))
             _line := array.get(lineArrRollingRes, i)
-            _line.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, _valRollingRes)
-            _line.set_xy2(barIndexNextTFStart+nbarsInDay, _valRollingRes)
+            _line.set_xy1(startTimeRolling, _valRollingRes)
+            _line.set_xy2(endTimeRolling, _valRollingRes)
             _label := array.get(labelArrRollingRes, i)
-            _label.set_xy(barIndexNextTFStart+nbarsInDay, _valRollingRes)
+            _label.set_xy(endTimeRolling, _valRollingRes)
             _label.set_text(str.tostring(_valRollingRes))
 
             _valRollingSup = fibrange(pvpRolling, rollingHighTFChg, rollingLowTFChg, -array.get(fibList, i))
             _line := array.get(lineArrRollingSup, i)
-            _line.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, _valRollingSup)
-            _line.set_xy2(barIndexNextTFStart+nbarsInDay, _valRollingSup)
+            _line.set_xy1(startTimeRolling, _valRollingSup)
+            _line.set_xy2(endTimeRolling, _valRollingSup)
             _label := array.get(labelArrRollingSup, i)
-            _label.set_xy(barIndexNextTFStart+nbarsInDay, _valRollingSup)
+            _label.set_xy(endTimeRolling, _valRollingSup)
             _label.set_text(str.tostring(_valRollingSup))
+
 
 tcpvp = ta.change(pvp)
 
 // plot(pvp, color=color.fuchsia)
 // plot(pvpRolling, color=color.maroon)
-if barstate.isconfirmed// and ta.change(pvpRolling) != 0  //session.islastbar_regular
-    linePivot.set_xy1(barIndexCurTFStart, pvp)
-    linePivot.set_xy2(barIndexCurTFStart+nbarsInDay, pvp)
-    labelPivot.set_xy(barIndexCurTFStart+nbarsInDay, pvp)
+if barstate.isconfirmed or timeframe.change(pivotTimeFrame)// and ta.change(pvpRolling) != 0  //session.islastbar_regular
+    linePivot.set_xy1(startTime, pvp)
+    linePivot.set_xy2(endTime, pvp)
+    labelPivot.set_xy(endTime, pvp)
     labelPivot.set_text(str.tostring(pvp))
 
-    lineRollingPivot.set_xy1(barIndexNextTFStart+nbarsInDay*3/4, pvpRolling)
-    lineRollingPivot.set_xy2(barIndexNextTFStart+nbarsInDay, pvpRolling)
-    labelRollingPivot.set_xy(barIndexNextTFStart+nbarsInDay, pvpRolling)
+    lineRollingPivot.set_xy1(startTimeRolling, pvpRolling)
+    lineRollingPivot.set_xy2(endTimeRolling, pvpRolling)
+    labelRollingPivot.set_xy(endTimeRolling, pvpRolling)
     labelRollingPivot.set_text(str.tostring(pvpRolling))
 
-    if timeframe.change(higherTF) //and ta.change(pvp) != 0  //session.islastbar_regular
+    if timeframe.change(pivotTimeFrame) //and ta.change(pvp) != 0  //session.islastbar_regular
         if pivotMatrix.rows() > 0
             pivotLine _pivotLine = pivotMatrix.get(pivotMatrix.rows()-1,0)
             _pivotLine.isLatest := false
@@ -175,12 +184,12 @@ if barstate.isconfirmed// and ta.change(pvpRolling) != 0  //session.islastbar_re
         if not(_pivotLine.isRetired) // i.e. line is still active
             if low < _pivotLine._line.get_y1() and high > _pivotLine._line.get_y1()
                 _pivotLine.isRetired := true
-                _pivotLine._line.set_x2(bar_index)
+                _pivotLine._line.set_x2(time)
             else
-                _pivotLine._line.set_x2(last_bar_index)
+                _pivotLine._line.set_x2(last_bar_time)
         if not _pivotLine.isLatest
             _pivotLine._line.set_width(1)
-            if _pivotLine._line.get_x2() - _pivotLine._line.get_x1() >= nbarsInDay
+            if _pivotLine._line.get_x2() - _pivotLine._line.get_x1() >= numMilliSecondsInPivotTF
                 _pivotLine._line.set_color(color.fuchsia)
                 _pivotLine._line.set_style(line.style_solid)
             else
