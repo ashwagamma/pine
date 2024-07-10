@@ -28,17 +28,24 @@ updateLineLabel(arrLine, arrLabel, idx, startTime, endTime, val) =>
     
 
 //Pivot Points 
-pivotTimeFrame = input.timeframe('D', group = "Main Settings")
+pivotTimeFrame = input.timeframe("1D", group = "Main Settings")
 showlastLTF = input(title='Show Only Last Period', defval=true, group = "Main Settings")
+showLatestCPR = input(title='Show Latest CPR', defval=true, group = "Main Settings")
+showRetiredCPR = input(title='Show Retired CPR', defval=true, group = "Main Settings")
+showRolling = input(title='Show Rolling', defval=true, group = "Main Settings")
+plotAllHistoricalLines = input(title='Plot Historical', defval=false, group = "Main Settings")
 
 colorRes     = input.color(color.orange, title = "Resistance Color", group = "Style Settings")
 colorSup     = input.color(color.orange,   title = "Support Color", group = "Style Settings")
 colorPivot      = input.color(color.blue, title = "Pivot Color", group = "Style Settings")
+colorCPR      = input.color(color.blue, title = "CPR Color", group = "Style Settings")
+widthPVP     = input.int(3, minval=1, title = "Pivot Line Width", group = "Style Settings")
 width     = input.int(2, minval=1, title = "Line Width", group = "Style Settings")
 widthMinor     = input.int(1, minval=1, title = "Line Width Minor", group = "Style Settings")
-trans     = input.int(25, minval=1, title = "Line Transparency", group = "Style Settings")
-transMinor     = input.int(75, minval=1, title = "Line Transparency Minor", group = "Style Settings")
-lstyleLTF = input.string(title='Line Style', options=['Solid', 'Circles', 'Cross'], defval='Solid', group = "Style Settings")
+trans     = input.int(0, minval=0, title = "Line Transparency", group = "Style Settings")
+transCPR     = input.int(80, minval=1, title = "CPR Transparency", group = "Style Settings")
+transRetiredCPR     = input.int(90, minval=1, title = "Retired CPR Transparency", group = "Style Settings")
+transMinor     = input.int(0, minval=0, title = "Line Transparency Minor", group = "Style Settings")
 
 
 var float rollingHigh = na
@@ -49,19 +56,24 @@ var float rollingLowTFChg = na
 var float rollingHighTFChg = na
 
 float[] fibList = array.from(0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.382, 1.618, 2)
-int[] transp = array.from(65, 25, 65, 25, 65, 25, 65, 65, 65, 65)
-int[] transpLabel = array.from(100, 25, 100, 25, 100, 25, 100, 100, 100, 100)
-int[] transpRolling = array.from(65, 25, 65, 25, 65, 25, 65, 65, 65, 65)
-int[] transpRollingLabel = array.from(100, 65, 100, 65, 100, 65, 100, 100, 100, 100)
+int[] transp = array.from(25, 0, 25, 0, 25, 0, 25, 65, 65, 65)
+string[] sizeLabel = array.from(size.small, size.normal, size.small, size.normal, size.small, size.normal, size.small, size.small, size.small, size.small)
+int[] transpRollingDefault = array.from(40, 25, 65, 25, 65, 25, 65, 65, 65, 65)
+int[] transpHide = array.from(100, 100, 100, 100, 100, 100, 100, 100, 100, 100)
+int[] transpRollingLabelDefault = array.from(65, 65, 100, 65, 100, 65, 100, 100, 100, 100)
+int[] transpRolling = showRolling? transpRollingDefault: transpHide
+int[] transpRollingLabel = showRolling? transpRollingLabelDefault: transpHide
+
 int[] lineWidth = array.from(1, 2, 1, 2, 1, 2, 1, 1, 1, 1)
 int[] lineWidthRolling = array.from(1, 2, 1, 2, 1, 2, 1, 1, 1, 1)
-int lineWidthPivot = 2
+int lineWidthPivot = 3
 var valArrRes = array.new<float>(10, 0)
 var valArrSup = array.new<float>(10, 0)
 var valArrRollingRes = array.new<float>(10, 0)
 var valArrRollingSup = array.new<float>(10, 0)
 
 var line linePivot = line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_solid)
+var box boxCPR = box.new(time, 0, time+1, 0, xloc=xloc.bar_time, bgcolor=na, border_color = na)
 var line lineRollingPivot = line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorPivot, trans), width=lineWidthPivot, style=line.style_dotted)
 var label labelPivot = label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(na,100), textcolor=colorPivot, size=size.normal, style=label.style_label_left, textalign = text.align_center)
 var label labelRollingPivot =  label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(na,100), textcolor=colorPivot, size=size.small, style=label.style_label_left, textalign = text.align_center)
@@ -77,9 +89,11 @@ var label[] labelArrRollingSup = array.new_label(10, na)
 
 
 int numMilliSecondsInPivotTF = timeframe.in_seconds(pivotTimeFrame) * 1000
+int numMilliSecondsInDay = timeframe.in_seconds("1D") * 1000
 
 type pivotLine
     line _line = na
+    box _boxCPR = na
     bool isLatest = true
     bool isRetired = false
 
@@ -89,16 +103,15 @@ pHigh = request.security(syminfo.tickerid, pivotTimeFrame, high[1], lookahead=ba
 pLow = request.security(syminfo.tickerid, pivotTimeFrame, low[1], lookahead=barmerge.lookahead_on)
 pClose = request.security(syminfo.tickerid, pivotTimeFrame, close[1], lookahead=barmerge.lookahead_on)
 
-islastLTF = showlastLTF ? request.security(syminfo.tickerid, pivotTimeFrame, barstate.islast, lookahead=barmerge.lookahead_on) : true
-linestyleLTF = lstyleLTF == 'Solid' ? plot.style_linebr : lstyleLTF == 'Circles' ? plot.style_circles : plot.style_cross
-
 barsSinceTFChange = nz(ta.barssince(timeframe.change(pivotTimeFrame)))
 closeBarLastTF := close[barsSinceTFChange+1]
 rollingHighTFChg := ta.highest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
 rollingLowTFChg := ta.lowest(na(barsSinceTFChange[1]) ? 1 : barsSinceTFChange[1]+2)
 
-closeForPVP = timeframe.isintraday ? closeBarLastTF : pClose
+closeForPVP = pivotTimeFrame == "1D" ? closeBarLastTF : pClose
 pvp = quantizeToTick((pHigh + pLow + closeForPVP) / 3)
+bcPivot = quantizeToTick((pHigh + pLow) / 2)
+tcPivot = quantizeToTick(2*pvp - bcPivot)
 pvpRolling = quantizeToTick((rollingHighTFChg + rollingLowTFChg + close) / 3)
 
 taChangePVP = ta.change(pvp)
@@ -111,16 +124,20 @@ var int endTimeRolling = na
 if timeframe.change(pivotTimeFrame)
     startTime := time
     endTime := startTime + numMilliSecondsInPivotTF
-    startTimeRolling := endTime + 3*numMilliSecondsInPivotTF/4
-    endTimeRolling := endTime + numMilliSecondsInPivotTF
+    if dayofweek(time) == dayofweek.thursday or dayofweek(time) == dayofweek.friday
+        startTimeRolling := endTime + 15*numMilliSecondsInDay/4
+        endTimeRolling := endTime + 4*numMilliSecondsInDay
+    else
+        startTimeRolling := endTime + 7*numMilliSecondsInDay/4
+        endTimeRolling := endTime + 2*numMilliSecondsInDay
 
 
 if na(array.get(lineArrRes,0)) //  initialize the arrays of lines
     for i = 0 to array.size(fibList) - 1
         array.set(lineArrRes, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorRes, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
-        array.set(labelArrRes, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(labelArrRes, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transp, i)), size=array.get(sizeLabel, i), style=label.style_label_left, textalign = text.align_center))
         array.set(lineArrSup, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorSup, array.get(transp, i)), width=array.get(lineWidth, i), style=line.style_solid))
-        array.set(labelArrSup, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transpLabel, i)), size=size.normal, style=label.style_label_left, textalign = text.align_center))
+        array.set(labelArrSup, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorSup, array.get(transp, i)), size=array.get(sizeLabel, i), style=label.style_label_left, textalign = text.align_center))
         array.set(lineArrRollingRes, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorRes, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
         array.set(labelArrRollingRes, i, label.new(time, 0, "", xloc=xloc.bar_time, color=color.new(color.white,100), textcolor=color.new(colorRes, array.get(transpRollingLabel, i)), size=size.small, style=label.style_label_left, textalign = text.align_center))
         array.set(lineArrRollingSup, i, line.new(time, 0, time+1, 0, xloc=xloc.bar_time, color=color.new(colorSup, array.get(transpRolling, i)), width=array.get(lineWidthRolling, i), style=line.style_dotted))
@@ -150,6 +167,10 @@ if barstate.isconfirmed or timeframe.change(pivotTimeFrame)// and ta.change(pvpR
     linePivot.set_xy2(endTime, pvp)
     labelPivot.set_xy(endTime, pvp)
     labelPivot.set_text(str.tostring(pvp))
+    boxCPR.set_left(startTime)
+    boxCPR.set_right(endTime)
+    boxCPR.set_bottom(bcPivot)
+    boxCPR.set_top(tcPivot)
 
     lineRollingPivot.set_xy1(startTimeRolling, pvpRolling)
     lineRollingPivot.set_xy2(endTimeRolling, pvpRolling)
@@ -161,7 +182,7 @@ if barstate.isconfirmed or timeframe.change(pivotTimeFrame)// and ta.change(pvpR
             pivotLine _pivotLine = pivotMatrix.get(pivotMatrix.rows()-1,0)
             _pivotLine.isLatest := false
         pivotMatrix.add_row()
-        pivotMatrix.set(pivotMatrix.rows()-1,0,pivotLine.new(linePivot.copy()))
+        pivotMatrix.set(pivotMatrix.rows()-1,0,pivotLine.new(linePivot.copy(), boxCPR.copy()))
 
 
     // retire pivot lines that have been breached, and extend lines that have not yet been touched
@@ -171,78 +192,91 @@ if barstate.isconfirmed or timeframe.change(pivotTimeFrame)// and ta.change(pvpR
             if low < _pivotLine._line.get_y1() and high > _pivotLine._line.get_y1()
                 _pivotLine.isRetired := true
                 _pivotLine._line.set_x2(time)
+                _pivotLine._boxCPR.set_right(time)
             else
-                _pivotLine._line.set_x2(last_bar_time)
+                _pivotLine._line.set_x2(endTime)
+                _pivotLine._boxCPR.set_right(endTime)
         if not _pivotLine.isLatest
             _pivotLine._line.set_width(1)
             if _pivotLine._line.get_x2() - _pivotLine._line.get_x1() >= numMilliSecondsInPivotTF
-                _pivotLine._line.set_color(color.fuchsia)
+                _pivotLine._line.set_color(colorCPR)
                 _pivotLine._line.set_style(line.style_solid)
             else
-                _pivotLine._line.set_color(color.new(color.fuchsia, 100))
+                _pivotLine._line.set_color(colorCPR)
+            if not _pivotLine.isRetired
+                _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transCPR))
+            else
+                if showRetiredCPR
+                    _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transRetiredCPR))
+                else
+                    _pivotLine._boxCPR.set_bgcolor(na)
+        else
+            if showLatestCPR
+                _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transCPR))
 
 
 
 
+f0 = input.float(defval=0.236, title='F0', group = "Levels")
+f1 = input.float(defval=0.382, title='F1', group = "Levels")
+f2 = input.float(defval=0.5, title='F2', group = "Levels")
+f3 = input.float(defval=0.618, title='F3', group = "Levels")
+f4 = input.float(defval=0.786, title='F4', group = "Levels")
+f5 = input.float(defval=1.000, title='F5', group = "Levels")
+f6 = input.float(defval=1.272, title='F6', group = "Levels")
+f7 = input.float(defval=1.382, title='F7', group = "Levels")
+f8 = input.float(defval=1.618, title='F8', group = "Levels")
+f9 = input.float(defval=2, title='F9', group = "Levels")
 
+vR0 = fibrange(pvp, pHigh, pLow, f0)
+vR1 = fibrange(pvp, pHigh, pLow, f1)
+vR2 = fibrange(pvp, pHigh, pLow, f2)
+vR3 = fibrange(pvp, pHigh, pLow, f3)
+vR4 = fibrange(pvp, pHigh, pLow, f4)
+vR5 = fibrange(pvp, pHigh, pLow, f5)
+vR6 = fibrange(pvp, pHigh, pLow, f6)
+vR7 = fibrange(pvp, pHigh, pLow, f7)
+vR8 = fibrange(pvp, pHigh, pLow, f8)
+vR9 = fibrange(pvp, pHigh, pLow, f9)
 
+vS0 = fibrange(pvp, pHigh, pLow, -f0)
+vS1 = fibrange(pvp, pHigh, pLow, -f1)
+vS2 = fibrange(pvp, pHigh, pLow, -f2)
+vS3 = fibrange(pvp, pHigh, pLow, -f3)
+vS4 = fibrange(pvp, pHigh, pLow, -f4)
+vS5 = fibrange(pvp, pHigh, pLow, -f5)
+vS6 = fibrange(pvp, pHigh, pLow, -f6)
+vS7 = fibrange(pvp, pHigh, pLow, -f7)
+vS8 = fibrange(pvp, pHigh, pLow, -f8)
+vS9 = fibrange(pvp, pHigh, pLow, -f9)
 
-// f0 = input.float(defval=0.236, title='F0', group = "Levels")
-// f1 = input.float(defval=0.382, title='F1', group = "Levels")
-// f2 = input.float(defval=0.5, title='F2', group = "Levels")
-// f3 = input.float(defval=0.618, title='F3', group = "Levels")
-// f4 = input.float(defval=0.786, title='F4', group = "Levels")
-// f5 = input.float(defval=1.000, title='F5', group = "Levels")
-// f6 = input.float(defval=1.272, title='F6', group = "Levels")
-// f7 = input.float(defval=1.382, title='F7', group = "Levels")
-// f8 = input.float(defval=1.618, title='F8', group = "Levels")
-// f9 = input.float(defval=2, title='F9', group = "Levels")
+pvplot = plot(plotAllHistoricalLines ? tcpvp != 0 ? na : pvp : na, color=color.new(colorPivot,trans), title='PP', style=plot.style_linebr, linewidth=widthPVP, display = display.pane)
 
-// vR0 = fibrange(pvp, pHigh, pLow, f0)
-// vR1 = fibrange(pvp, pHigh, pLow, f1)
-// vR2 = fibrange(pvp, pHigh, pLow, f2)
-// vR3 = fibrange(pvp, pHigh, pLow, f3)
-// vR4 = fibrange(pvp, pHigh, pLow, f4)
-// vR5 = fibrange(pvp, pHigh, pLow, f5)
-// vR6 = fibrange(pvp, pHigh, pLow, f6)
-// vR7 = fibrange(pvp, pHigh, pLow, f7)
-// vR8 = fibrange(pvp, pHigh, pLow, f8)
-// vR9 = fibrange(pvp, pHigh, pLow, f9)
+res0 = plot(plotAllHistoricalLines and vR0 > 0 ? ta.change(vR0) != 0 ? na : vR0 : na, color=color.new(colorRes,transMinor), title='R0', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res1 = plot(plotAllHistoricalLines and vR1 > 0 ? ta.change(vR1) != 0 ? na : vR1 : na, color=color.new(colorRes,trans), title='R1', style=plot.style_linebr, linewidth=width, display = display.pane)
+res2 = plot(plotAllHistoricalLines and vR2 > 0 ? ta.change(vR2) != 0 ? na : vR2 : na, color=color.new(colorRes,transMinor), title='R2', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res3 = plot(plotAllHistoricalLines and vR3 > 0 ? ta.change(vR3) != 0 ? na : vR3 : na, color=color.new(colorRes,trans), title='R3', style=plot.style_linebr, linewidth=width, display = display.pane)
+res4 = plot(plotAllHistoricalLines and vR4 > 0 ? ta.change(vR4) != 0 ? na : vR4 : na, color=color.new(colorRes,transMinor), title='R4', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res5 = plot(plotAllHistoricalLines and vR5 > 0 ? ta.change(vR5) != 0 ? na : vR5 : na, color=color.new(colorRes,trans), title='R5', style=plot.style_linebr, linewidth=width, display = display.pane)
+res6 = plot(plotAllHistoricalLines and vR6 > 0 ? ta.change(vR6) != 0 ? na : vR6 : na, color=color.new(colorRes,transMinor), title='R6', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res7 = plot(plotAllHistoricalLines and vR7 > 0 ? ta.change(vR7) != 0 ? na : vR7 : na, color=color.new(colorRes,transMinor), title='R7', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res8 = plot(plotAllHistoricalLines and vR8 > 0 ? ta.change(vR8) != 0 ? na : vR8 : na, color=color.new(colorRes,transMinor), title='R8', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+res9 = plot(plotAllHistoricalLines and vR9 > 0 ? ta.change(vR9) != 0 ? na : vR9 : na, color=color.new(colorRes,transMinor), title='R9', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup0 = plot(plotAllHistoricalLines and vS0 > 0 ? ta.change(vS0) != 0 ? na : vS0 : na, color=color.new(colorSup,transMinor), title='S0', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup1 = plot(plotAllHistoricalLines and vS1 > 0 ? ta.change(vS1) != 0 ? na : vS1 : na, color=color.new(colorSup,trans), title='S1', style=plot.style_linebr, linewidth=width, display = display.pane)
+sup2 = plot(plotAllHistoricalLines and vS2 > 0 ? ta.change(vS2) != 0 ? na : vS2 : na, color=color.new(colorSup,transMinor), title='S2', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup3 = plot(plotAllHistoricalLines and vS3 > 0 ? ta.change(vS3) != 0 ? na : vS3 : na, color=color.new(colorSup,trans), title='S3', style=plot.style_linebr, linewidth=width, display = display.pane)
+sup4 = plot(plotAllHistoricalLines and vS4 > 0 ? ta.change(vS4) != 0 ? na : vS4 : na, color=color.new(colorSup,transMinor), title='S4', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup5 = plot(plotAllHistoricalLines and vS5 > 0 ? ta.change(vS5) != 0 ? na : vS5 : na, color=color.new(colorSup,trans), title='S5', style=plot.style_linebr, linewidth=width, display = display.pane)
+sup6 = plot(plotAllHistoricalLines and vS6 > 0 ? ta.change(vS6) != 0 ? na : vS6 : na, color=color.new(colorSup,transMinor), title='S6', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup7 = plot(plotAllHistoricalLines and vS7 > 0 ? ta.change(vS7) != 0 ? na : vS7 : na, color=color.new(colorSup,transMinor), title='S7', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup8 = plot(plotAllHistoricalLines and vS8 > 0 ? ta.change(vS8) != 0 ? na : vS8 : na, color=color.new(colorSup,transMinor), title='S8', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
+sup9 = plot(plotAllHistoricalLines and vS9 > 0 ? ta.change(vS9) != 0 ? na : vS9 : na, color=color.new(colorSup,transMinor), title='S9', style=plot.style_linebr, linewidth=widthMinor, display = display.pane)
 
-// vS0 = fibrange(pvp, pHigh, pLow, -f0)
-// vS1 = fibrange(pvp, pHigh, pLow, -f1)
-// vS2 = fibrange(pvp, pHigh, pLow, -f2)
-// vS3 = fibrange(pvp, pHigh, pLow, -f3)
-// vS4 = fibrange(pvp, pHigh, pLow, -f4)
-// vS5 = fibrange(pvp, pHigh, pLow, -f5)
-// vS6 = fibrange(pvp, pHigh, pLow, -f6)
-// vS7 = fibrange(pvp, pHigh, pLow, -f7)
-// vS8 = fibrange(pvp, pHigh, pLow, -f8)
-// vS9 = fibrange(pvp, pHigh, pLow, -f9)
-
-// pvplot = plot(islastLTF ? tcpvp != 0 ? na : pvp : na, color=color.new(colorPivot,trans), title='PP', style=plot.style_linebr, linewidth=width, display = display.pane)
-
-// res0 = plot(islastLTF and vR0 > 0 ? ta.change(vR0) != 0 ? na : vR0 : na, color=color.new(colorRes,transMinor), title='R0', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res1 = plot(islastLTF and vR1 > 0 ? ta.change(vR1) != 0 ? na : vR1 : na, color=color.new(colorRes,trans), title='R1', style=linestyleLTF, linewidth=width, display = display.pane)
-// res2 = plot(islastLTF and vR2 > 0 ? ta.change(vR2) != 0 ? na : vR2 : na, color=color.new(colorRes,transMinor), title='R2', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res3 = plot(islastLTF and vR3 > 0 ? ta.change(vR3) != 0 ? na : vR3 : na, color=color.new(colorRes,trans), title='R3', style=linestyleLTF, linewidth=width, display = display.pane)
-// res4 = plot(islastLTF and vR4 > 0 ? ta.change(vR4) != 0 ? na : vR4 : na, color=color.new(colorRes,transMinor), title='R4', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res5 = plot(islastLTF and vR5 > 0 ? ta.change(vR5) != 0 ? na : vR5 : na, color=color.new(colorRes,trans), title='R5', style=linestyleLTF, linewidth=width, display = display.pane)
-// res6 = plot(islastLTF and vR6 > 0 ? ta.change(vR6) != 0 ? na : vR6 : na, color=color.new(colorRes,transMinor), title='R6', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res7 = plot(islastLTF and vR7 > 0 ? ta.change(vR7) != 0 ? na : vR7 : na, color=color.new(colorRes,transMinor), title='R7', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res8 = plot(islastLTF and vR8 > 0 ? ta.change(vR8) != 0 ? na : vR8 : na, color=color.new(colorRes,transMinor), title='R8', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// res9 = plot(islastLTF and vR9 > 0 ? ta.change(vR9) != 0 ? na : vR9 : na, color=color.new(colorRes,transMinor), title='R9', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup0 = plot(islastLTF and vS0 > 0 ? ta.change(vS0) != 0 ? na : vS0 : na, color=color.new(colorSup,transMinor), title='S0', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup1 = plot(islastLTF and vS1 > 0 ? ta.change(vS1) != 0 ? na : vS1 : na, color=color.new(colorSup,trans), title='S1', style=linestyleLTF, linewidth=width, display = display.pane)
-// sup2 = plot(islastLTF and vS2 > 0 ? ta.change(vS2) != 0 ? na : vS2 : na, color=color.new(colorSup,transMinor), title='S2', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup3 = plot(islastLTF and vS3 > 0 ? ta.change(vS3) != 0 ? na : vS3 : na, color=color.new(colorSup,trans), title='S3', style=linestyleLTF, linewidth=width, display = display.pane)
-// sup4 = plot(islastLTF and vS4 > 0 ? ta.change(vS4) != 0 ? na : vS4 : na, color=color.new(colorSup,transMinor), title='S4', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup5 = plot(islastLTF and vS5 > 0 ? ta.change(vS5) != 0 ? na : vS5 : na, color=color.new(colorSup,trans), title='S5', style=linestyleLTF, linewidth=width, display = display.pane)
-// sup6 = plot(islastLTF and vS6 > 0 ? ta.change(vS6) != 0 ? na : vS6 : na, color=color.new(colorSup,transMinor), title='S6', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup7 = plot(islastLTF and vS7 > 0 ? ta.change(vS7) != 0 ? na : vS7 : na, color=color.new(colorSup,transMinor), title='S7', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup8 = plot(islastLTF and vS8 > 0 ? ta.change(vS8) != 0 ? na : vS8 : na, color=color.new(colorSup,transMinor), title='S8', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
-// sup9 = plot(islastLTF and vS9 > 0 ? ta.change(vS9) != 0 ? na : vS9 : na, color=color.new(colorSup,transMinor), title='S9', style=linestyleLTF, linewidth=widthMinor, display = display.pane)
+// bgcolor(timeframe.change(pivotTimeFrame) ? color.fuchsia : na)
 
 // var bool lvs = na
-// lvs := close>vR5
+// // line _line = array.get(lineArrRes, 5) 
+// // lvs := high>_line.get_y1()
+// lvs := timeframe.change(pivotTimeFrame) and (open < linePivot.get_y1())
 // bgcolor(lvs[1]==false and lvs==true ? color.black : na)
