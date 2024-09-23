@@ -96,6 +96,7 @@ type pivotLine
     box _boxCPR = na
     bool isLatest = true
     bool isRetired = false
+    int retireTime = 0
 
 var pivotMatrix = matrix.new<pivotLine>(0,1)
 
@@ -188,32 +189,39 @@ if barstate.isconfirmed or timeframe.change(pivotTimeFrame)// and ta.change(pvpR
     // retire pivot lines that have been breached, and extend lines that have not yet been touched
     for i = (pivotMatrix.rows()>0?pivotMatrix.rows()-1:na) to 0 by 1
         pivotLine _pivotLine = pivotMatrix.get(i, 0)
-        if not(_pivotLine.isRetired) // i.e. line is still active
+
+        if not(_pivotLine.isRetired) //and not _pivotLine.isLatest // i.e. line is still active
             if low < _pivotLine._line.get_y1() and high > _pivotLine._line.get_y1()
                 _pivotLine.isRetired := true
-                _pivotLine._line.set_x2(time)
-                _pivotLine._boxCPR.set_right(time)
-            else
-                _pivotLine._line.set_x2(endTime)
-                _pivotLine._boxCPR.set_right(endTime)
-        if not _pivotLine.isLatest
+                _pivotLine.retireTime := time
+
+        if _pivotLine.isLatest
+            _pivotLine._boxCPR.set_right(endTime)
+            _pivotLine._line.set_x2(endTime)
+            _pivotLine._line.set_color(colorCPR)
+            if showLatestCPR
+                _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transCPR))
+        else
             _pivotLine._line.set_width(1)
+
+
             if _pivotLine._line.get_x2() - _pivotLine._line.get_x1() >= numMilliSecondsInPivotTF
                 _pivotLine._line.set_color(colorCPR)
                 _pivotLine._line.set_style(line.style_solid)
             else
                 _pivotLine._line.set_color(colorCPR)
+
             if not _pivotLine.isRetired
+                _pivotLine._line.set_x2(endTime)
+                _pivotLine._boxCPR.set_right(endTime)
                 _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transCPR))
             else
+                _pivotLine._line.set_x2(_pivotLine.retireTime)
+                _pivotLine._boxCPR.set_right(_pivotLine.retireTime)
                 if showRetiredCPR
                     _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transRetiredCPR))
                 else
                     _pivotLine._boxCPR.set_bgcolor(na)
-        else
-            if showLatestCPR
-                _pivotLine._boxCPR.set_bgcolor(color.new(colorCPR, transCPR))
-
 
 
 
