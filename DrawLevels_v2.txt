@@ -1,0 +1,123 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ashwagamma
+
+//@version=6
+indicator("DrawLevels_v2", overlay=true, max_lines_count = 500, max_boxes_count=500, max_labels_count=500)
+
+int[] levels_support = array.from(5756,5747,5726,5720,5712,5706,5699,5686,5678,5668,5660,5644,5636,5610,5601,5588,5580,5558,5546,5537,5525,5514,5507,5500,5492,5482,5457,5446,5438,5427)
+int[] ranges_support_0 = array.from(5738,5650,5620,5560,5469)
+int[] ranges_support_1 = array.from(5740,5654,5625,5564,5471)
+int[] levels_resistance = array.from(5763,5772,5783,5797,5803,5809,5816,5824,5836,5842,5850,5860,5865,5872,5886,5893,5901,5910,5918,5945,5954,5958,5962,5985,5990,6010,6014,6020,6031,6039,6048,6056,6077,6083,6101,6109,6120)
+int[] ranges_resistance_0 = array.from(5927,5970,5995,6068,6090)
+int[] ranges_resistance_1 = array.from(5932,5975,6000,6072,6093)
+string[] labels_support = array.from("5756 (Major; lof38to40&r)","5747 ","5726 ","5720 (major; dilo_iffnomelt; lof&r; lopop38to40+; shobkdn)","5712 ","5706 ","5699 (major)","5686 (major; possdilo)","5678 ","5668 ","5660 ","5644 ","5636 ","5610 ","5601 (major)","5588 ","5580 ","5558 ","5546 ","5537 ","5525 ","5514 (major)","5507 (major)","5500 ","5492 ","5482 (major)","5457 ","5446 (major)","5438 ","5427 (major)")
+string[] labels_resistance = array.from("5763 ","5772 ","5783 ","5797 (major; disho_backtest_ovrshoot; lotrappyreclaim)","5803 ","5809 ","5816 (major; disho)","5824 ","5836 (major)","5842 ","5850 (major; disho)","5860 ","5865 (major)","5872 ","5886 (major)","5893 ","5901 ","5910 (major)","5918 ","5945 ","5954 ","5958 ","5962 ","5985 ","5990 ","6010 ","6014 ","6020 (major)","6031 ","6039 (major)","6048 ","6056 ","6077 ","6083 ","6101 (major)","6109 ","6120 (major)")
+string[] labels_ranges_support = array.from("5738-40 (major)","5650-54 (major; lofbd)","5620-25 (major; lookforlongs)","5564-60 (major)","5469-71 (major)")
+string[] labels_ranges_resistance = array.from("5927-32 (major)","5970-75 (major)","5995-6000 (major)","6068-72 (major)","6090-93 (major)")
+int[] levels_va = array.from(5829,5814,5826,5724,5715,5664,6192,5987,6020,5982,5955)
+string[] labels_va = array.from("pdVAH","pdVAL","pdPOC","pwVAH","pwVAL","pwPOC","febVAH","febVAL","febPOC","janVAL","decVAL")
+
+int transpBox = 70
+colorRes     = input.color(color.red, title = "Resistance Color", group = "Style Settings")
+colorSup     = input.color(color.green,   title = "Support Color", group = "Style Settings")
+colorVA      = input.color(color.rgb(0,255,255),   title = "VA Color", group = "Style Settings")
+var line[] arrSupLine = array.new_line(levels_support.size(), na)
+var line[] arrSupRangeLine = array.new_line(ranges_support_0.size(), na)
+var line[] arrResLine = array.new_line(levels_resistance.size(), na)
+var line[] arrResRangeLine = array.new_line(ranges_resistance_0.size(), na)
+var box[] arrSupBox = array.new_box(ranges_support_0.size(), na)
+var box[] arrResBox = array.new_box(ranges_resistance_0.size(), na)
+var label[] arrSupLineLabel = array.new_label(labels_support.size(), na)
+var label[] arrSupRangeLineLabel = array.new_label(ranges_support_0.size(), na)
+var label[] arrResLineLabel = array.new_label(labels_resistance.size(), na)
+var label[] arrResRangeLineLabel = array.new_label(labels_resistance.size(), na)
+
+var label[] arrVALabel = array.new_label(labels_va.size(), na)
+var int[] arrPriorTradingDayTS = array.new_int(2, 0)
+
+if na(array.get(arrSupLine,0))
+    for i = 0 to levels_support.size()-1
+        array.set(arrSupLine, i, line.new(time, levels_support.get(i), time+1, levels_support.get(i), xloc=xloc.bar_time, color=colorSup))
+        array.set(arrSupLineLabel, i, label.new(time, levels_support.get(i), labels_support.get(i), xloc=xloc.bar_time, color=color.new(na,100), textcolor = colorSup, style=label.style_label_left, textalign = text.align_center))
+
+    for i = 0 to levels_resistance.size()-1
+        array.set(arrResLine, i, line.new(time, levels_resistance.get(i), time+1, levels_resistance.get(i), xloc=xloc.bar_time, color=colorRes))
+        array.set(arrResLineLabel, i, label.new(time, levels_resistance.get(i), labels_resistance.get(i), xloc=xloc.bar_time, color=color.new(na,100), textcolor = colorRes, style=label.style_label_left, textalign = text.align_center))
+
+    for i = 0 to ranges_support_0.size()-1
+        array.set(arrSupBox, i, box.new(time, ranges_support_0.get(i), time+1, ranges_support_1.get(i), xloc=xloc.bar_time, bgcolor = color.new(colorSup, transpBox), border_color = na))
+        array.set(arrSupRangeLine, i, line.new(time, ranges_support_0.get(i), time+1, ranges_support_0.get(i), xloc=xloc.bar_time, color=colorSup))
+        array.set(arrSupRangeLineLabel, i, label.new(time, ranges_support_0.get(i), labels_ranges_support.get(i), xloc=xloc.bar_time, color=color.new(na,100), textcolor = colorSup, style=label.style_label_left, textalign = text.align_center))
+
+    for i = 0 to ranges_resistance_0.size()-1
+        array.set(arrResBox, i, box.new(time, ranges_resistance_0.get(i), time+1, ranges_resistance_1.get(i), xloc=xloc.bar_time, bgcolor = color.new(colorRes, transpBox), border_color = na))
+        array.set(arrResRangeLine, i, line.new(time, ranges_resistance_0.get(i), time+1, ranges_resistance_0.get(i), xloc=xloc.bar_time, color=colorRes))
+        array.set(arrResRangeLineLabel, i, label.new(time, ranges_resistance_0.get(i), labels_ranges_resistance.get(i), xloc=xloc.bar_time, color=color.new(na,100), textcolor = colorRes, style=label.style_label_left, textalign = text.align_center))
+
+    for i = 0 to levels_va.size()-1
+        array.set(arrVALabel, i, label.new(time, levels_va.get(i), str.tostring(levels_va.get(i))+' ('+labels_va.get(i)+')', xloc=xloc.bar_time, color=color.new(na,100), textcolor = colorVA, style=label.style_label_right, textalign = text.align_center))
+
+int tct = ta.change(time)
+var int startTimePrevTradingDay = na
+var int startTime1D = na
+var int startTime = na
+var int endTime = na
+
+if timeframe.change("1D") and (timenow-time < 7*24*60*60*1000)
+    startTime1D := time
+    startTime := time - timeframe.in_seconds("1D") * 10000
+    endTime := time + timeframe.in_seconds("1D") * 1000
+    startTimePrevTradingDay := time - tct
+    array.push(arrPriorTradingDayTS, startTimePrevTradingDay)
+    if arrPriorTradingDayTS.size() > 2
+        array.remove(arrPriorTradingDayTS, 0)
+    for i = 0 to arrSupLine.size()-1
+        array.get(arrSupLine, i).set_x1(startTime)
+    for i = 0 to arrResLine.size()-1
+        array.get(arrResLine, i).set_x1(startTime)
+
+    for i = 0 to arrSupRangeLine.size()-1
+        array.get(arrSupRangeLine, i).set_x1(startTime)
+    for i = 0 to arrResRangeLine.size()-1
+        array.get(arrResRangeLine, i).set_x1(startTime)
+
+    for i = 0 to arrSupBox.size()-1
+        array.get(arrSupBox, i).set_left(startTime)
+    for i = 0 to arrResBox.size()-1
+        array.get(arrResBox, i).set_left(startTime)
+        
+if barstate.islastconfirmedhistory or (barstate.islast and barstate.isconfirmed)
+    for i = 0 to arrSupLine.size()-1
+        array.get(arrSupLine, i).set_x2((9*last_bar_time+endTime)/10)
+        array.get(arrSupLineLabel, i).set_x((9*last_bar_time+endTime)/10)
+    for i = 0 to arrResLine.size()-1
+        array.get(arrResLine, i).set_x2((9*last_bar_time+endTime)/10)
+        array.get(arrResLineLabel, i).set_x((9*last_bar_time+endTime)/10)
+
+    for i = 0 to arrSupRangeLine.size()-1
+        array.get(arrSupRangeLine, i).set_x2((9*last_bar_time+endTime)/10)
+        array.get(arrSupRangeLineLabel, i).set_x((9*last_bar_time+endTime)/10)
+    for i = 0 to arrResRangeLine.size()-1
+        array.get(arrResRangeLine, i).set_x2((9*last_bar_time+endTime)/10)
+        array.get(arrResRangeLineLabel, i).set_x((9*last_bar_time+endTime)/10)
+
+    for i = 0 to arrSupBox.size()-1
+        array.get(arrSupBox, i).set_right((9*last_bar_time+endTime)/10)
+    for i = 0 to arrResBox.size()-1
+        array.get(arrResBox, i).set_right((9*last_bar_time+endTime)/10)
+
+    for i = 0 to arrVALabel.size()-1
+        array.get(arrVALabel, i).set_x(arrPriorTradingDayTS.get(arrPriorTradingDayTS.size()-2))
+
+
+for i = 0 to levels_support.size()-1
+    if (open > levels_support.get(i) and close < levels_support.get(i))
+        alert(labels_support.get(i), alert.freq_once_per_bar)
+
+//var bool isDone = false
+//if not isDone
+//    alert(labels_support.get(0), alert.freq_once_per_bar)
+//    isDone := true
+
+
+
